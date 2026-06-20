@@ -120,7 +120,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
             const Icon(Icons.favorite, color: Color(0xFFAE2F34), size: 48),
             const SizedBox(height: 12),
             const Text(
-              '시큐어커플',
+              '둘만',
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.w800,

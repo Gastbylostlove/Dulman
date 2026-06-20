@@ -125,7 +125,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         backgroundColor: Colors.transparent,
         elevation: 0,
         title: const Text(
-          '시큐어커플',
+          '둘만',
           style: TextStyle(color: Color(0xFFAE2F34), fontWeight: FontWeight.w800),
         ),
         actions: [

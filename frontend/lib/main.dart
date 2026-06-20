@@ -28,7 +28,7 @@ class DulmanApp extends StatelessWidget {
         ),
       ],
       child: MaterialApp(
-        title: '시큐어커플',
+        title: '둘만',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(

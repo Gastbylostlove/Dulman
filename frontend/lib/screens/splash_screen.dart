@@ -67,7 +67,7 @@ class _SplashScreenState extends State<SplashScreen> {
             ),
             const SizedBox(height: 20),
             const Text(
-              '시큐어커플',
+              '둘만',
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 28,
