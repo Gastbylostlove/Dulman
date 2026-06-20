@@ -147,7 +147,10 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     final auth = context.read<AuthProvider>();
     if (auth.accessToken == null || chat.chatId == null) return;
 
-    Log.i('MEDIA', '미디어 전송 시작: ${files.length}개 파일, 권한=$permissionType, chatId=${chat.chatId}');
+    Log.i(
+      'MEDIA',
+      '미디어 전송 시작: ${files.length}개 파일, 권한=$permissionType, chatId=${chat.chatId}',
+    );
 
     // 1. 업로드 인텐트 발급
     final fileInfos = files.map((f) {
@@ -169,7 +172,10 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       final uploadItems = intentResult['upload_items'] as List<dynamic>;
       Log.i('MEDIA', '[1/3] 인텐트 수신 완료: ${uploadItems.length}개');
       for (final item in uploadItems) {
-        Log.i('MEDIA', '  upload_url=${item['upload_url']}  media_url=${item['media_url']}');
+        Log.i(
+          'MEDIA',
+          '  upload_url=${item['upload_url']}  media_url=${item['media_url']}',
+        );
       }
 
       // 2. 파일을 상대 경로(upload_url)로 PUT 업로드
@@ -204,13 +210,15 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       Log.e('MEDIA', '미디어 전송 실패', e, st);
       if (!mounted) return;
       final msg = e is ApiException ? e.message : '네트워크 오류가 발생했습니다.';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('미디어 전송 실패: $msg')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('미디어 전송 실패: $msg')));
     }
   }
 
   Future<void> _handleReset() async {
+    final chat = context.read<ChatProvider>();
+    final messenger = ScaffoldMessenger.of(context);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -232,15 +240,16 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       ),
     );
     if (confirm != true) return;
-    final err = await context.read<ChatProvider>().resetChat();
+    final err = await chat.resetChat();
     if (err != null && mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('초기화 실패: $err')));
+      messenger.showSnackBar(SnackBar(content: Text('초기화 실패: $err')));
     }
   }
 
   Future<void> _handleLeave() async {
+    final chat = context.read<ChatProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -262,15 +271,13 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       ),
     );
     if (confirm != true) return;
-    final err = await context.read<ChatProvider>().leaveChat();
+    final err = await chat.leaveChat();
     if (err != null && mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('나가기 실패: $err')));
+      messenger.showSnackBar(SnackBar(content: Text('나가기 실패: $err')));
       return;
     }
     if (!mounted) return;
-    Navigator.of(context).pushReplacement(
+    navigator.pushReplacement(
       MaterialPageRoute(builder: (_) => const OnboardingScreen()),
     );
   }
@@ -493,6 +500,8 @@ class _MediaContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final previews = message.media.take(4).toList();
+
     if (message.media.isEmpty) {
       return Container(
         padding: const EdgeInsets.all(14),
@@ -513,6 +522,8 @@ class _MediaContent extends StatelessWidget {
         ),
       );
     }
+
+    final chat = context.read<ChatProvider>();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -538,27 +549,15 @@ class _MediaContent extends StatelessWidget {
         Wrap(
           spacing: 4,
           runSpacing: 4,
-          children: message.media.take(4).map((m) {
-            return ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: Image.network(
-                m.url.startsWith('http') ? m.url : '$kBaseUrl${m.url}',
-                width: 120,
-                height: 120,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stack) {
-                  final imageUrl = m.url.startsWith('http') ? m.url : '$kBaseUrl${m.url}';
-                  Log.e('IMAGE', '이미지 로드 실패: $imageUrl', error, stack);
-                  return Container(
-                    width: 120,
-                    height: 120,
-                    color: Colors.grey[200],
-                    child: const Icon(Icons.broken_image, color: Colors.grey),
-                  );
-                },
+          children: [
+            for (final entry in previews.asMap().entries)
+              _MediaThumb(
+                message: message,
+                chat: chat,
+                mediaIndex: entry.key,
+                mediaUrl: _resolveMediaUrl(entry.value),
               ),
-            );
-          }).toList(),
+          ],
         ),
         if (message.media.length > 4)
           Padding(
@@ -582,6 +581,215 @@ class _MediaContent extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+class _MediaThumb extends StatelessWidget {
+  final Message message;
+  final ChatProvider chat;
+  final int mediaIndex;
+  final String mediaUrl;
+
+  const _MediaThumb({
+    required this.message,
+    required this.chat,
+    required this.mediaIndex,
+    required this.mediaUrl,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final canOpen = message.canView;
+
+    return GestureDetector(
+      onTap: canOpen ? () => _openMedia(context) : null,
+      child: Stack(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Image.network(
+              mediaUrl,
+              width: 120,
+              height: 120,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stack) {
+                Log.e('IMAGE', '이미지 로드 실패: $mediaUrl', error, stack);
+                return Container(
+                  width: 120,
+                  height: 120,
+                  color: Colors.grey[200],
+                  child: const Icon(Icons.broken_image, color: Colors.grey),
+                );
+              },
+            ),
+          ),
+          Positioned(
+            right: 6,
+            bottom: 6,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.55),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Icon(
+                canOpen
+                    ? Icons.open_in_full_rounded
+                    : Icons.lock_outline_rounded,
+                size: 12,
+                color: Colors.white,
+              ),
+            ),
+          ),
+          if (!canOpen)
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openMedia(BuildContext context) async {
+    final mediaUrls = message.media.map(_resolveMediaUrl).toList();
+    final startIndex = mediaIndex.clamp(0, mediaUrls.length - 1).toInt();
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+
+    if (message.permissionType != 'keep') {
+      final err = await chat.accessMedia(message.id);
+      if (!navigator.mounted || !messenger.mounted) return;
+      if (err != null) {
+        messenger.showSnackBar(SnackBar(content: Text(err)));
+        return;
+      }
+    }
+
+    if (!navigator.mounted) return;
+    await navigator.push(
+      MaterialPageRoute(
+        builder: (_) => _MediaViewerScreen(
+          mediaUrls: mediaUrls,
+          initialIndex: startIndex,
+          permissionLabel: message.permissionLabel,
+        ),
+      ),
+    );
+  }
+}
+
+String _resolveMediaUrl(MediaItem media) {
+  return media.url.startsWith('http') ? media.url : '$kBaseUrl${media.url}';
+}
+
+class _MediaViewerScreen extends StatefulWidget {
+  final List<String> mediaUrls;
+  final int initialIndex;
+  final String permissionLabel;
+
+  const _MediaViewerScreen({
+    required this.mediaUrls,
+    required this.initialIndex,
+    required this.permissionLabel,
+  });
+
+  @override
+  State<_MediaViewerScreen> createState() => _MediaViewerScreenState();
+}
+
+class _MediaViewerScreenState extends State<_MediaViewerScreen> {
+  late final PageController _pageController;
+  int _currentIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex;
+    _pageController = PageController(initialPage: widget.initialIndex);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: PageView.builder(
+                controller: _pageController,
+                itemCount: widget.mediaUrls.length,
+                onPageChanged: (value) => setState(() => _currentIndex = value),
+                itemBuilder: (_, index) {
+                  return Center(
+                    child: InteractiveViewer(
+                      minScale: 1,
+                      maxScale: 4,
+                      child: Image.network(
+                        widget.mediaUrls[index],
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stack) {
+                          Log.e(
+                            'IMAGE',
+                            '전체화면 이미지 로드 실패: ${widget.mediaUrls[index]}',
+                            error,
+                            stack,
+                          );
+                          return const Icon(
+                            Icons.broken_image,
+                            color: Colors.white54,
+                            size: 56,
+                          );
+                        },
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            Positioned(
+              top: 12,
+              left: 12,
+              right: 12,
+              child: Row(
+                children: [
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close, color: Colors.white),
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      widget.permissionLabel,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  if (widget.mediaUrls.length > 1)
+                    Text(
+                      '${_currentIndex + 1}/${widget.mediaUrls.length}',
+                      style: const TextStyle(color: Colors.white70),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
