@@ -14,3 +14,12 @@
 1. 앱 시작, 로그인 직후, 온보딩 진입 시 `chat.updateAuth(auth)`를 먼저 호출한다.
 2. 채팅 복구 로직을 수정할 때는 active/waiting 상태를 구분한다.
 3. 대화가 사라졌다고 보이면 먼저 backend 환경 변수와 DB 상태를 확인한다.
+
+## 캡처 보호 재발 메모
+
+이 저장소의 캡처 보호는 현재 `Android`의 `FLAG_SECURE` 중심 구현이다.
+
+- `ChatRoomScreen` 진입 시와 `MainActivity.onCreate()`에서만 `FLAG_SECURE`를 건다.
+- 이 프로젝트에는 `ios/` 네이티브 코드가 없으므로 iOS 캡처 차단은 여기서 해결되지 않는다.
+- 이미지 뷰어를 별도 route로 열어도 같은 window 안에서만 보호가 유지된다. 다른 플랫폼이나 다른 캡처 경로는 별도 대응이 필요하다.
+- 캡처 보호가 안 된다고 보이면 먼저 실제 실행 플랫폼이 Android인지, 그리고 보호 대상이 현재 `FlutterActivity`의 같은 window인지 확인한다.
