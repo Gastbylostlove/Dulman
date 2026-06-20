@@ -1,0 +1,75 @@
+/**
+ * Application-wide error codes from the specification.
+ */
+export const ERROR_CODES = Object.freeze({
+  AUTH_LOGIN_ID_DUPLICATED: "AUTH_LOGIN_ID_DUPLICATED",
+  AUTH_INVALID_CREDENTIALS: "AUTH_INVALID_CREDENTIALS",
+  AUTH_RATE_LIMITED: "AUTH_RATE_LIMITED",
+  AUTH_SESSION_EXPIRED: "AUTH_SESSION_EXPIRED",
+  AUTH_DEVICE_REPLACED: "AUTH_DEVICE_REPLACED",
+  CHAT_ACTIVE_EXISTS: "CHAT_ACTIVE_EXISTS",
+  CHAT_INVITE_NOT_FOUND: "CHAT_INVITE_NOT_FOUND",
+  CHAT_INVITE_RATE_LIMITED: "CHAT_INVITE_RATE_LIMITED",
+  CHAT_FULL: "CHAT_FULL",
+  CHAT_CREATE_FAILED: "CHAT_CREATE_FAILED",
+  CHAT_JOIN_FAILED: "CHAT_JOIN_FAILED",
+  CHAT_NOT_FOUND: "CHAT_NOT_FOUND",
+  CHAT_NOT_ACTIVE: "CHAT_NOT_ACTIVE",
+  CHAT_PARTICIPANT_REQUIRED: "CHAT_PARTICIPANT_REQUIRED",
+  MESSAGE_EMPTY: "MESSAGE_EMPTY",
+  MESSAGE_SEND_FAILED: "MESSAGE_SEND_FAILED",
+  MEDIA_LIMIT_EXCEEDED: "MEDIA_LIMIT_EXCEEDED",
+  MEDIA_UPLOAD_FAILED: "MEDIA_UPLOAD_FAILED",
+  MEDIA_VIEW_LIMIT_EXCEEDED: "MEDIA_VIEW_LIMIT_EXCEEDED",
+  MEDIA_VIEW_COUNT_UPDATE_FAILED: "MEDIA_VIEW_COUNT_UPDATE_FAILED",
+  MEDIA_URL_ISSUE_FAILED: "MEDIA_URL_ISSUE_FAILED",
+  CHAT_RESET_FAILED: "CHAT_RESET_FAILED",
+  CHAT_LEAVE_FAILED: "CHAT_LEAVE_FAILED",
+  REQUEST_VALIDATION_FAILED: "REQUEST_VALIDATION_FAILED",
+  NOT_FOUND: "NOT_FOUND",
+});
+
+/**
+ * Chat status values allowed by the specification.
+ */
+export const CHAT_STATUS = Object.freeze({
+  WAITING: "waiting",
+  ACTIVE: "active",
+  ENDED: "ended",
+});
+
+/**
+ * Message types allowed by the specification.
+ */
+export const MESSAGE_TYPES = Object.freeze({
+  TEXT: "text",
+  MEDIA: "media",
+});
+
+/**
+ * Media permission types allowed by the specification.
+ */
+export const PERMISSION_TYPES = Object.freeze({
+  ONCE: "once",
+  REPLAY_ONCE: "replay_once",
+  KEEP: "keep",
+});
+
+/**
+ * Media upload limits from the specification draft.
+ */
+export const MEDIA_LIMITS = Object.freeze({
+  MAX_PHOTOS_PER_SEND: 10,
+  MAX_VIDEOS_PER_SEND: 5,
+  MAX_TOTAL_BYTES_PER_SEND: 500 * 1024 * 1024,
+  MAX_PHOTO_BYTES: 20 * 1024 * 1024,
+  MAX_VIDEO_BYTES: 200 * 1024 * 1024,
+});
+
+/**
+ * Authentication rate limit parameters from the specification.
+ */
+export const RATE_LIMITS = Object.freeze({
+  MAX_FAILURES: 5,
+  BLOCK_MS: 5 * 60 * 1000,
+});
