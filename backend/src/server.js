@@ -1,7 +1,6 @@
 import http from "node:http";
-import { promises as fs } from "node:fs";
-import path from "node:path";
 import { getAppConfig } from "./config/env.js";
+import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import {
   validateChatIdInput,
   validateInviteCodeInput,
@@ -20,8 +19,6 @@ import { createService } from "./service.js";
 import { createAppError } from "./errors.js";
 import { ERROR_CODES } from "./constants.js";
 
-const UPLOADS_DIR = path.join(process.cwd(), "uploads");
-
 const MIME_EXT = {
   "image/jpeg": "jpg",
   "image/png": "png",
@@ -36,6 +33,16 @@ function mimeFromFilename(filename) {
   return found ? found[0] : "application/octet-stream";
 }
 
+function createS3Client(s3Config) {
+  return new S3Client({
+    region: s3Config.region,
+    credentials: {
+      accessKeyId: s3Config.accessKeyId,
+      secretAccessKey: s3Config.secretAccessKey,
+    },
+  });
+}
+
 let runtimePromise = null;
 
 /**
@@ -45,6 +52,7 @@ let runtimePromise = null;
  */
 export async function startServer() {
   const runtime = await getRuntime();
+  const s3 = createS3Client(runtime.config.s3);
   logRuntimeConfig(runtime.config);
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, "http://localhost");
@@ -62,42 +70,53 @@ export async function startServer() {
     }
 
     try {
-      // 파일 업로드: PUT /uploads/:chatId/:fileId
+      // 파일 업로드: PUT /uploads/:chatId/:fileId → S3
       if (req.method === "PUT" && url.pathname.startsWith("/uploads/")) {
         const parts = url.pathname.split("/").filter(Boolean);
         if (parts.length >= 3) {
           const chatId = parts[1];
           const fileId = parts[2];
-          const dir = path.join(UPLOADS_DIR, chatId);
-          await fs.mkdir(dir, { recursive: true });
+          const s3Key = `${runtime.config.s3.prefix}/${chatId}/${fileId}`;
           const chunks = [];
           for await (const chunk of req) chunks.push(chunk);
           const buf = Buffer.concat(chunks);
-          await fs.writeFile(path.join(dir, fileId), buf);
+          const mime = req.headers["content-type"] ?? mimeFromFilename(fileId);
+          await s3.send(new PutObjectCommand({
+            Bucket: runtime.config.s3.bucket,
+            Key: s3Key,
+            Body: buf,
+            ContentType: mime,
+          }));
           const ms = Date.now() - sw;
-          console.log(`[UPLOAD] PUT /uploads/${chatId}/${fileId}  ${buf.byteLength}bytes  ${ms}ms  from=${clientIp}`);
+          console.log(`[UPLOAD] PUT /uploads/${chatId}/${fileId}  ${buf.byteLength}bytes  ${ms}ms  s3=${s3Key}  from=${clientIp}`);
           sendJson(res, 200, { ok: true });
           return;
         }
       }
 
-      // 파일 서빙: GET /media/:chatId/:fileId
+      // 파일 서빙: GET /media/:chatId/:fileId ← S3
       if (req.method === "GET" && url.pathname.startsWith("/media/")) {
         const parts = url.pathname.split("/").filter(Boolean);
         if (parts.length >= 3) {
           const chatId = parts[1];
           const fileId = parts[2];
-          const filePath = path.join(UPLOADS_DIR, chatId, fileId);
+          const s3Key = `${runtime.config.s3.prefix}/${chatId}/${fileId}`;
           try {
-            const bytes = await fs.readFile(filePath);
-            const mime = mimeFromFilename(fileId);
+            const s3Res = await s3.send(new GetObjectCommand({
+              Bucket: runtime.config.s3.bucket,
+              Key: s3Key,
+            }));
+            const chunks = [];
+            for await (const chunk of s3Res.Body) chunks.push(chunk);
+            const bytes = Buffer.concat(chunks);
+            const mime = s3Res.ContentType ?? mimeFromFilename(fileId);
             const ms = Date.now() - sw;
-            console.log(`[MEDIA]  GET /media/${chatId}/${fileId}  ${bytes.byteLength}bytes  ${ms}ms  from=${clientIp}`);
+            console.log(`[MEDIA]  GET /media/${chatId}/${fileId}  ${bytes.byteLength}bytes  ${ms}ms  s3=${s3Key}  from=${clientIp}`);
             res.writeHead(200, { "Content-Type": mime });
             res.end(bytes);
-          } catch {
+          } catch (e) {
             const ms = Date.now() - sw;
-            console.warn(`[MEDIA]  GET /media/${chatId}/${fileId}  404 파일 없음  ${ms}ms  path=${filePath}  from=${clientIp}`);
+            console.warn(`[MEDIA]  GET /media/${chatId}/${fileId}  404  ${ms}ms  s3=${s3Key}  from=${clientIp}  err=${e.Code ?? e.message}`);
             res.writeHead(404);
             res.end();
           }

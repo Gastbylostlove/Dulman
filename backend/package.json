@@ -9,6 +9,7 @@
     "test:http:keep-data": "HTTP_INTEGRATION_KEEP_DATA=true node --test test/http.integration.test.js"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1073.0",
     "pg": "^8.22.0"
   }
 }

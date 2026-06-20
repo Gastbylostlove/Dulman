@@ -273,8 +273,8 @@ async function createMediaUploadIntent(repo, accessToken, input, publicUrl, toke
   return {
     upload_items: files.map((file) => ({
       client_file_id: file.client_file_id,
-      upload_url: `${publicUrl}/uploads/${chat.id}/${file.client_file_id}`,
-      media_url: `${publicUrl}/media/${chat.id}/${file.client_file_id}`,
+      upload_url: `/uploads/${chat.id}/${file.client_file_id}`,
+      media_url: `/media/${chat.id}/${file.client_file_id}`,
       mime_type: file.mime_type,
     })),
   };

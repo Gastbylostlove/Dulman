@@ -56,6 +56,13 @@ export function getAppConfig() {
     dbProvider: process.env.DB_PROVIDER ?? (process.env.DATABASE_URL ? "postgres" : "memory"),
     dbSsl: parseBoolean(process.env.DB_SSL ?? "false"),
     autoMigrate: parseBoolean(process.env.DB_AUTO_MIGRATE ?? "true"),
+    s3: {
+      bucket: process.env.AWS_S3_BUCKET ?? null,
+      prefix: process.env.AWS_S3_PREFIX ?? "media",
+      region: process.env.AWS_REGION ?? "ap-northeast-2",
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID ?? null,
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ?? null,
+    },
   };
 }
 

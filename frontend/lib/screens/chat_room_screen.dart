@@ -542,12 +542,13 @@ class _MediaContent extends StatelessWidget {
             return ClipRRect(
               borderRadius: BorderRadius.circular(10),
               child: Image.network(
-                '$kBaseUrl${m.url}',
+                m.url.startsWith('http') ? m.url : '$kBaseUrl${m.url}',
                 width: 120,
                 height: 120,
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stack) {
-                  Log.e('IMAGE', '이미지 로드 실패: $kBaseUrl${m.url}', error, stack);
+                  final imageUrl = m.url.startsWith('http') ? m.url : '$kBaseUrl${m.url}';
+                  Log.e('IMAGE', '이미지 로드 실패: $imageUrl', error, stack);
                   return Container(
                     width: 120,
                     height: 120,

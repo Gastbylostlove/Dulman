@@ -87,13 +87,13 @@ class ApiClient {
     return body;
   }
 
-  // 파일을 서버에 PUT 업로드 (uploadPath는 /uploads/... 형태의 상대 경로)
+  // 파일을 서버에 PUT 업로드 (상대 경로 /uploads/... 또는 절대 URL 모두 지원)
   static Future<void> uploadFile(
     String uploadPath,
     String filePath,
     String mimeType,
   ) async {
-    final url = '$kBaseUrl$uploadPath';
+    final url = uploadPath.startsWith('http') ? uploadPath : '$kBaseUrl$uploadPath';
     Log.i('UPLOAD', 'PUT $uploadPath  mime=$mimeType  src=$filePath');
     final sw = Stopwatch()..start();
     try {
