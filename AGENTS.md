@@ -73,6 +73,14 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 Before claiming completion, verify with the narrowest relevant test or check.
 
+## 재발 방지 메모
+
+- 채팅 재시작, 복구, 세션 유지, 대화 소실 같은 문제를 다룰 때는 먼저 [MEMORY.md](MEMORY.md)를 읽는다.
+- 특히 아래 항목은 고위험 체크다.
+  - `chat.updateAuth(auth)`가 `loadActiveChat()` / `createChat()`보다 먼저 실행되는가
+  - backend가 `DB_PROVIDER=postgres`로 실행되는가
+  - `GET /api/chats/active`가 `waiting` 상태를 복구하지 못한다는 점을 고려했는가
+
 ---
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.

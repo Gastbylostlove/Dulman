@@ -164,7 +164,10 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       // 3. 메시지 전송 (mock URL로)
       final uploadItems = intentResult['upload_items'] as List<dynamic>;
       final mediaItems = uploadItems.map((item) {
-        return {'url': item['media_url'] as String, 'mime_type': item['mime_type'] as String};
+        return {
+          'url': item['media_url'] as String,
+          'mime_type': item['mime_type'] as String,
+        };
       }).toList();
 
       await ApiClient.sendMediaMessage(
@@ -177,9 +180,9 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       await chat.refreshMessages();
     } on ApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('미디어 전송 실패: ${e.message}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('미디어 전송 실패: ${e.message}')));
     }
   }
 
@@ -190,10 +193,16 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
         title: const Text('대화 초기화'),
         content: const Text('모든 대화 내역이 화면에서 사라집니다.\n서버 데이터는 보존됩니다. 계속하시겠습니까?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('취소')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('취소'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('초기화', style: TextStyle(color: Color(0xFFAE2F34))),
+            child: const Text(
+              '초기화',
+              style: TextStyle(color: Color(0xFFAE2F34)),
+            ),
           ),
         ],
       ),
@@ -201,9 +210,9 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     if (confirm != true) return;
     final err = await context.read<ChatProvider>().resetChat();
     if (err != null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('초기화 실패: $err')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('초기화 실패: $err')));
     }
   }
 
@@ -214,10 +223,16 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
         title: const Text('채팅방 나가기'),
         content: const Text('채팅방을 나가면 연결이 종료됩니다.\n이 작업은 되돌릴 수 없습니다.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('취소')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('취소'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('나가기', style: TextStyle(color: Color(0xFFAE2F34))),
+            child: const Text(
+              '나가기',
+              style: TextStyle(color: Color(0xFFAE2F34)),
+            ),
           ),
         ],
       ),
@@ -225,9 +240,9 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     if (confirm != true) return;
     final err = await context.read<ChatProvider>().leaveChat();
     if (err != null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('나가기 실패: $err')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('나가기 실패: $err')));
       return;
     }
     if (!mounted) return;
@@ -280,7 +295,10 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
               const PopupMenuItem(value: 'reset', child: Text('대화 초기화')),
               const PopupMenuItem(
                 value: 'leave',
-                child: Text('채팅방 나가기', style: TextStyle(color: Color(0xFFAE2F34))),
+                child: Text(
+                  '채팅방 나가기',
+                  style: TextStyle(color: Color(0xFFAE2F34)),
+                ),
               ),
             ],
           ),
@@ -291,7 +309,10 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
           // 전송 오류 배너
           if (chat.sendError != null)
             MaterialBanner(
-              content: Text(chat.sendError!, style: const TextStyle(fontSize: 13)),
+              content: Text(
+                chat.sendError!,
+                style: const TextStyle(fontSize: 13),
+              ),
               actions: [
                 TextButton(
                   onPressed: chat.clearSendError,
@@ -303,15 +324,24 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
           Expanded(
             child: chat.messages.isEmpty
                 ? const Center(
-                    child: Text('첫 메시지를 보내보세요!', style: TextStyle(color: Colors.grey)),
+                    child: Text(
+                      '첫 메시지를 보내보세요!',
+                      style: TextStyle(color: Colors.grey),
+                    ),
                   )
                 : ListView.builder(
                     controller: _scrollCtrl,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
                     itemCount: chat.messages.length,
                     itemBuilder: (_, i) {
                       final msg = chat.messages[i];
-                      return _MessageBubble(message: msg, isMe: msg.senderId == myId);
+                      return _MessageBubble(
+                        message: msg,
+                        isMe: msg.senderId == myId,
+                      );
                     },
                   ),
           ),
@@ -343,7 +373,9 @@ class _MessageBubble extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
-        mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: isMe
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!isMe) ...[
@@ -351,15 +383,22 @@ class _MessageBubble extends StatelessWidget {
               radius: 14,
               backgroundColor: const Color(0xFFE0E0E0),
               child: Text(
-                message.senderId.isNotEmpty ? message.senderId[0].toUpperCase() : '?',
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                message.senderId.isNotEmpty
+                    ? message.senderId[0].toUpperCase()
+                    : '?',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
             const SizedBox(width: 6),
           ],
           Flexible(
             child: Column(
-              crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              crossAxisAlignment: isMe
+                  ? CrossAxisAlignment.end
+                  : CrossAxisAlignment.start,
               children: [
                 Container(
                   constraints: BoxConstraints(
@@ -390,7 +429,9 @@ class _MessageBubble extends StatelessWidget {
                       ? Text(
                           message.textContent ?? '',
                           style: TextStyle(
-                            color: isMe ? Colors.white : const Color(0xFF1A1A1A),
+                            color: isMe
+                                ? Colors.white
+                                : const Color(0xFF1A1A1A),
                             fontSize: 15,
                             height: 1.4,
                           ),
@@ -461,7 +502,11 @@ class _MediaContent extends StatelessWidget {
           ),
           child: Text(
             message.permissionLabel,
-            style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
         const SizedBox(height: 4),
@@ -530,6 +575,13 @@ class _InputBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final shortcuts = <ShortcutActivator, Intent>{
+      const SingleActivator(LogicalKeyboardKey.enter):
+          const _SendMessageIntent(),
+      const SingleActivator(LogicalKeyboardKey.numpadEnter):
+          const _SendMessageIntent(),
+    };
+
     return Container(
       color: Colors.white,
       padding: EdgeInsets.only(
@@ -543,26 +595,48 @@ class _InputBar extends StatelessWidget {
           // 미디어 버튼
           IconButton(
             onPressed: onMedia,
-            icon: const Icon(Icons.photo_library_outlined, color: Color(0xFFAE2F34)),
+            icon: const Icon(
+              Icons.photo_library_outlined,
+              color: Color(0xFFAE2F34),
+            ),
           ),
           // 텍스트 필드
           Expanded(
-            child: TextField(
-              controller: ctrl,
-              maxLines: 4,
-              minLines: 1,
-              textInputAction: TextInputAction.send,
-              onSubmitted: (_) => onSend(),
-              decoration: InputDecoration(
-                hintText: '메시지 입력...',
-                hintStyle: const TextStyle(color: Colors.grey, fontSize: 14),
-                filled: true,
-                fillColor: const Color(0xFFF5F0EA),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(22),
-                  borderSide: BorderSide.none,
+            child: Shortcuts(
+              shortcuts: shortcuts,
+              child: Actions(
+                actions: {
+                  _SendMessageIntent: CallbackAction<_SendMessageIntent>(
+                    onInvoke: (_) {
+                      if (!sending) onSend();
+                      return null;
+                    },
+                  ),
+                },
+                child: TextField(
+                  controller: ctrl,
+                  maxLines: 4,
+                  minLines: 1,
+                  textInputAction: TextInputAction.send,
+                  onSubmitted: (_) => onSend(),
+                  decoration: InputDecoration(
+                    hintText: '메시지 입력...',
+                    hintStyle: const TextStyle(
+                      color: Colors.grey,
+                      fontSize: 14,
+                    ),
+                    filled: true,
+                    fillColor: const Color(0xFFF5F0EA),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(22),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                  ),
                 ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               ),
             ),
           ),
@@ -574,17 +648,27 @@ class _InputBar extends StatelessWidget {
                   child: SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFAE2F34)),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Color(0xFFAE2F34),
+                    ),
                   ),
                 )
               : IconButton(
                   onPressed: onSend,
-                  icon: const Icon(Icons.send_rounded, color: Color(0xFFAE2F34)),
+                  icon: const Icon(
+                    Icons.send_rounded,
+                    color: Color(0xFFAE2F34),
+                  ),
                 ),
         ],
       ),
     );
   }
+}
+
+class _SendMessageIntent extends Intent {
+  const _SendMessageIntent();
 }
 
 // ─── 미디어 권한 선택 시트 ───────────────────────────────────────────────────────
@@ -674,9 +758,15 @@ class _PermItem extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label, style: TextStyle(fontWeight: FontWeight.w700, color: color)),
+                  Text(
+                    label,
+                    style: TextStyle(fontWeight: FontWeight.w700, color: color),
+                  ),
                   const SizedBox(height: 2),
-                  Text(description, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                  Text(
+                    description,
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
                 ],
               ),
             ),
