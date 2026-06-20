@@ -25,6 +25,7 @@ class _SplashScreenState extends State<SplashScreen> {
     final chat = context.read<ChatProvider>();
 
     final activeChatId = await auth.init();
+    chat.updateAuth(auth);
 
     if (!mounted) return;
 
@@ -43,9 +44,9 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   void _go(Widget screen) {
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => screen),
-    );
+    Navigator.of(
+      context,
+    ).pushReplacement(MaterialPageRoute(builder: (_) => screen));
   }
 
   @override
@@ -63,7 +64,11 @@ class _SplashScreenState extends State<SplashScreen> {
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(24),
               ),
-              child: const Icon(Icons.favorite, color: Color(0xFFAE2F34), size: 44),
+              child: const Icon(
+                Icons.favorite,
+                color: Color(0xFFAE2F34),
+                size: 44,
+              ),
             ),
             const SizedBox(height: 20),
             const Text(
@@ -78,10 +83,17 @@ class _SplashScreenState extends State<SplashScreen> {
             const SizedBox(height: 8),
             const Text(
               'SecureCouple',
-              style: TextStyle(color: Colors.white70, fontSize: 13, letterSpacing: 1),
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 13,
+                letterSpacing: 1,
+              ),
             ),
             const SizedBox(height: 40),
-            const CircularProgressIndicator(color: Colors.white54, strokeWidth: 2),
+            const CircularProgressIndicator(
+              color: Colors.white54,
+              strokeWidth: 2,
+            ),
           ],
         ),
       ),

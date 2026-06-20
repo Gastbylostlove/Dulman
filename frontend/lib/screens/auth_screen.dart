@@ -12,16 +12,17 @@ class AuthScreen extends StatefulWidget {
   State<AuthScreen> createState() => _AuthScreenState();
 }
 
-class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateMixin {
+class _AuthScreenState extends State<AuthScreen>
+    with SingleTickerProviderStateMixin {
   late final TabController _tab;
 
   // 로그인 폼
-  final _loginIdCtrl    = TextEditingController();
-  final _loginPwCtrl    = TextEditingController();
+  final _loginIdCtrl = TextEditingController();
+  final _loginPwCtrl = TextEditingController();
 
   // 회원가입 폼
-  final _signupIdCtrl   = TextEditingController();
-  final _signupPwCtrl   = TextEditingController();
+  final _signupIdCtrl = TextEditingController();
+  final _signupPwCtrl = TextEditingController();
   final _signupPwConfirm = TextEditingController();
 
   bool _loading = false;
@@ -51,7 +52,10 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
       setState(() => _error = '아이디와 비밀번호를 입력해주세요.');
       return;
     }
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     final auth = context.read<AuthProvider>();
     final activeChatId = await auth.login(id, pw);
     if (!mounted) return;
@@ -80,7 +84,10 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
       setState(() => _error = '비밀번호는 6자 이상이어야 합니다.');
       return;
     }
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     final auth = context.read<AuthProvider>();
     final activeChatId = await auth.register(id, pw);
     if (!mounted) return;
@@ -94,7 +101,9 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
   }
 
   void _navigateAfterAuth(int? activeChatId) async {
+    final auth = context.read<AuthProvider>();
     final chat = context.read<ChatProvider>();
+    chat.updateAuth(auth);
     if (activeChatId != null) {
       await chat.loadActiveChat(knownChatId: activeChatId);
       if (!mounted) return;
@@ -165,7 +174,10 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFFFFEBEB),
                     borderRadius: BorderRadius.circular(10),
@@ -173,7 +185,10 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                   ),
                   child: Text(
                     _error!,
-                    style: const TextStyle(color: Color(0xFFB71C1C), fontSize: 13),
+                    style: const TextStyle(
+                      color: Color(0xFFB71C1C),
+                      fontSize: 13,
+                    ),
                   ),
                 ),
               ),
@@ -227,7 +242,12 @@ class _LoginForm extends StatelessWidget {
         children: [
           _Field(controller: idCtrl, label: '아이디', hint: 'example_id'),
           const SizedBox(height: 14),
-          _Field(controller: pwCtrl, label: '비밀번호', hint: '••••••••', obscure: true),
+          _Field(
+            controller: pwCtrl,
+            label: '비밀번호',
+            hint: '••••••••',
+            obscure: true,
+          ),
           const SizedBox(height: 24),
           _SubmitButton(loading: loading, label: '로그인', onTap: onSubmit),
         ],
@@ -259,9 +279,19 @@ class _SignupForm extends StatelessWidget {
         children: [
           _Field(controller: idCtrl, label: '아이디', hint: 'example_id'),
           const SizedBox(height: 14),
-          _Field(controller: pwCtrl, label: '비밀번호', hint: '6자 이상', obscure: true),
+          _Field(
+            controller: pwCtrl,
+            label: '비밀번호',
+            hint: '6자 이상',
+            obscure: true,
+          ),
           const SizedBox(height: 14),
-          _Field(controller: pwConfirmCtrl, label: '비밀번호 확인', hint: '••••••••', obscure: true),
+          _Field(
+            controller: pwConfirmCtrl,
+            label: '비밀번호 확인',
+            hint: '••••••••',
+            obscure: true,
+          ),
           const SizedBox(height: 24),
           _SubmitButton(loading: loading, label: '회원가입', onTap: onSubmit),
         ],
@@ -306,7 +336,10 @@ class _Field extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: Color(0xFFAE2F34), width: 1.5),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
       ),
     );
   }
@@ -317,7 +350,11 @@ class _SubmitButton extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
 
-  const _SubmitButton({required this.loading, required this.label, required this.onTap});
+  const _SubmitButton({
+    required this.loading,
+    required this.label,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -329,12 +366,27 @@ class _SubmitButton extends StatelessWidget {
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFFAE2F34),
           foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
           elevation: 0,
         ),
         child: loading
-            ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-            : Text(label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            ? const SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                  color: Colors.white,
+                  strokeWidth: 2,
+                ),
+              )
+            : Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
       ),
     );
   }

@@ -29,6 +29,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   Future<void> _initChat() async {
+    context.read<ChatProvider>().updateAuth(context.read<AuthProvider>());
     final chat = context.read<ChatProvider>();
     if (chat.state == ChatState.idle) {
       setState(() => _creating = true);
@@ -96,7 +97,10 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       setState(() => _joinError = '초대코드를 입력해주세요.');
       return;
     }
-    setState(() { _joining = true; _joinError = null; });
+    setState(() {
+      _joining = true;
+      _joinError = null;
+    });
     final chat = context.read<ChatProvider>();
     final err = await chat.joinChat(code);
     if (!mounted) return;
@@ -126,7 +130,10 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         elevation: 0,
         title: const Text(
           '둘만',
-          style: TextStyle(color: Color(0xFFAE2F34), fontWeight: FontWeight.w800),
+          style: TextStyle(
+            color: Color(0xFFAE2F34),
+            fontWeight: FontWeight.w800,
+          ),
         ),
         actions: [
           TextButton(
@@ -160,7 +167,10 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               ),
               indicatorSize: TabBarIndicatorSize.tab,
               dividerColor: Colors.transparent,
-              tabs: const [Tab(text: '초대코드 생성'), Tab(text: '코드 입력')],
+              tabs: const [
+                Tab(text: '초대코드 생성'),
+                Tab(text: '코드 입력'),
+              ],
             ),
           ),
           Expanded(
@@ -205,7 +215,11 @@ class _CreateTab extends StatelessWidget {
               color: const Color(0xFFFFEBEB),
               borderRadius: BorderRadius.circular(24),
             ),
-            child: const Icon(Icons.favorite, color: Color(0xFFAE2F34), size: 44),
+            child: const Icon(
+              Icons.favorite,
+              color: Color(0xFFAE2F34),
+              size: 44,
+            ),
           ),
           const SizedBox(height: 20),
           const Text(
@@ -291,7 +305,9 @@ class _CreateTab extends StatelessWidget {
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFAE2F34),
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
                 elevation: 0,
               ),
             ),
@@ -305,7 +321,10 @@ class _CreateTab extends StatelessWidget {
                 const SizedBox(
                   width: 14,
                   height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.grey),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.grey,
+                  ),
                 ),
                 const SizedBox(width: 8),
                 const Text(
@@ -363,7 +382,10 @@ class _JoinTab extends StatelessWidget {
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: const Color(0xFFFFCDD2)),
               ),
-              child: Text(error!, style: const TextStyle(color: Color(0xFFB71C1C), fontSize: 13)),
+              child: Text(
+                error!,
+                style: const TextStyle(color: Color(0xFFB71C1C), fontSize: 13),
+              ),
             ),
           TextField(
             controller: ctrl,
@@ -377,7 +399,11 @@ class _JoinTab extends StatelessWidget {
             ),
             decoration: InputDecoration(
               hintText: '초대코드 입력',
-              hintStyle: const TextStyle(letterSpacing: 0, fontWeight: FontWeight.w400, fontSize: 14),
+              hintStyle: const TextStyle(
+                letterSpacing: 0,
+                fontWeight: FontWeight.w400,
+                fontSize: 14,
+              ),
               filled: true,
               fillColor: Colors.white,
               border: OutlineInputBorder(
@@ -386,13 +412,22 @@ class _JoinTab extends StatelessWidget {
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
-                borderSide: const BorderSide(color: Color(0xFFAE2F34), width: 1.5),
+                borderSide: const BorderSide(
+                  color: Color(0xFFAE2F34),
+                  width: 1.5,
+                ),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
-                borderSide: const BorderSide(color: Color(0xFFAE2F34), width: 2),
+                borderSide: const BorderSide(
+                  color: Color(0xFFAE2F34),
+                  width: 2,
+                ),
               ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 18,
+              ),
             ),
           ),
           const SizedBox(height: 24),
@@ -402,13 +437,22 @@ class _JoinTab extends StatelessWidget {
             child: ElevatedButton.icon(
               onPressed: joining ? null : onJoin,
               icon: joining
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    )
                   : const Icon(Icons.link, size: 20),
               label: Text(joining ? '연결 중...' : '연결하기'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFAE2F34),
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
                 elevation: 0,
               ),
             ),
