@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../core/api_client.dart';
+import '../core/logger.dart';
 import '../core/secure_storage.dart';
 import '../core/constants.dart';
 
@@ -21,34 +22,42 @@ class AuthProvider extends ChangeNotifier {
 
   Future<int?> init() async {
     _deviceId = await SecureStorage.getOrCreateDeviceId();
+    Log.i('AUTH', 'init: deviceId=$_deviceId');
     final stored = await SecureStorage.loadAuth();
     final token = stored['access_token'];
     final loginId = stored['login_id'];
     final refreshToken = stored['refresh_token'];
 
     if (token == null || loginId == null) {
+      Log.i('AUTH', 'init: 저장된 토큰 없음 → unauthenticated');
       _status = AuthStatus.unauthenticated;
       notifyListeners();
       return null;
     }
 
+    Log.i('AUTH', 'init: 저장된 토큰 발견 loginId=$loginId');
     try {
       final result = await ApiClient.getActiveChat(token);
       _accessToken = token;
       _loginId = loginId;
       _status = AuthStatus.authenticated;
+      final chatId = result['active_chat_id'] as int?;
+      Log.i('AUTH', 'init: 토큰 유효 → authenticated  activeChatId=$chatId');
       notifyListeners();
-      return result['active_chat_id'] as int?;
+      return chatId;
     } on ApiException catch (e) {
+      Log.w('AUTH', 'init: 토큰 검증 실패 [${e.code}]');
       if (e.code == kErrSessionExpired && refreshToken != null) {
+        Log.i('AUTH', 'init: 토큰 갱신 시도');
         return await _tryRefresh(loginId, refreshToken);
       }
+      Log.w('AUTH', 'init: 토큰 폐기 → unauthenticated');
       await SecureStorage.clearAuth();
       _status = AuthStatus.unauthenticated;
       notifyListeners();
       return null;
-    } catch (_) {
-      // 네트워크 오류 시 저장된 토큰 그대로 사용
+    } catch (e, st) {
+      Log.e('AUTH', 'init: 네트워크 오류 → 저장된 토큰 유지', e, st);
       _accessToken = token;
       _loginId = loginId;
       _status = AuthStatus.authenticated;
@@ -58,6 +67,7 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<int?> _tryRefresh(String loginId, String refreshToken) async {
+    Log.i('AUTH', '_tryRefresh: loginId=$loginId');
     try {
       final result = await ApiClient.refreshTokens(loginId, refreshToken, _deviceId!);
       final newToken = result['access_token'] as String;
@@ -70,9 +80,11 @@ class AuthProvider extends ChangeNotifier {
       _loginId = loginId;
       _status = AuthStatus.authenticated;
       notifyListeners();
+      Log.i('AUTH', '_tryRefresh 성공 → authenticated');
       final chatResult = await ApiClient.getActiveChat(newToken);
       return chatResult['active_chat_id'] as int?;
-    } catch (_) {
+    } catch (e, st) {
+      Log.e('AUTH', '_tryRefresh 실패 → unauthenticated', e, st);
       await SecureStorage.clearAuth();
       _status = AuthStatus.unauthenticated;
       notifyListeners();
@@ -82,6 +94,7 @@ class AuthProvider extends ChangeNotifier {
 
   Future<int?> login(String loginId, String password) async {
     _error = null;
+    Log.i('AUTH', 'login: loginId=$loginId');
     try {
       final result = await ApiClient.login(loginId, password, _deviceId!);
       final accessToken = result['access_token'] as String;
@@ -95,8 +108,11 @@ class AuthProvider extends ChangeNotifier {
       _loginId = loginId;
       _status = AuthStatus.authenticated;
       notifyListeners();
-      return result['active_chat_id'] as int?;
+      final chatId = result['active_chat_id'] as int?;
+      Log.i('AUTH', 'login 성공: loginId=$loginId  activeChatId=$chatId');
+      return chatId;
     } on ApiException catch (e) {
+      Log.e('AUTH', 'login 실패: [${e.code}] ${e.message}');
       _error = _translateError(e.code, e.message);
       notifyListeners();
       return null;
@@ -105,10 +121,13 @@ class AuthProvider extends ChangeNotifier {
 
   Future<int?> register(String loginId, String password) async {
     _error = null;
+    Log.i('AUTH', 'register: loginId=$loginId');
     try {
       await ApiClient.register(loginId, password);
+      Log.i('AUTH', 'register 성공 → 자동 로그인');
       return await login(loginId, password);
     } on ApiException catch (e) {
+      Log.e('AUTH', 'register 실패: [${e.code}] ${e.message}');
       _error = _translateError(e.code, e.message);
       notifyListeners();
       return null;
@@ -116,6 +135,7 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    Log.i('AUTH', 'logout: loginId=$_loginId');
     await SecureStorage.clearAuth();
     _accessToken = null;
     _loginId = null;

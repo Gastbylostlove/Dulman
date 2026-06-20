@@ -1,6 +1,6 @@
-// 안드로이드 에뮬레이터에서 호스트 머신 접근: 10.0.2.2
-// 실기기 사용 시 Mac의 LAN IP로 변경 (예: http://192.168.0.10:4000)
-const String kBaseUrl = 'http://10.0.2.2:4000';
+// 실기기 LAN 사용 시: ifconfig en0 | grep 'inet '  으로 현재 IP 확인 후 변경
+// 에뮬레이터: http://10.0.2.2:4000
+const String kBaseUrl = 'http://172.21.100.123:4000';
 
 const String kStorageKeyAccessToken  = 'access_token';
 const String kStorageKeyRefreshToken = 'refresh_token';

@@ -7,6 +7,8 @@ import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../models/models.dart';
 import '../core/api_client.dart';
+import '../core/constants.dart';
+import '../core/logger.dart';
 import 'auth_screen.dart';
 import 'onboarding_screen.dart';
 
@@ -145,44 +147,66 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     final auth = context.read<AuthProvider>();
     if (auth.accessToken == null || chat.chatId == null) return;
 
+    Log.i('MEDIA', '미디어 전송 시작: ${files.length}개 파일, 권한=$permissionType, chatId=${chat.chatId}');
+
     // 1. 업로드 인텐트 발급
     final fileInfos = files.map((f) {
       final ext = f.name.split('.').last.toLowerCase();
       final mime = ext == 'mp4' ? 'video/mp4' : 'image/jpeg';
       final bytes = File(f.path).lengthSync();
+      Log.i('MEDIA', '  파일: ${f.name}  mime=$mime  size=${bytes}bytes');
       return {'client_file_id': f.name, 'mime_type': mime, 'byte_size': bytes};
     }).toList();
 
     try {
+      Log.i('MEDIA', '[1/3] 업로드 인텐트 요청');
       final intentResult = await ApiClient.createMediaUploadIntent(
         auth.accessToken!,
         chat.chatId!,
         fileInfos,
       );
 
-      // 2. 실제 업로드는 스토리지 백엔드 없이 스킵 (MVP)
-      // 3. 메시지 전송 (mock URL로)
       final uploadItems = intentResult['upload_items'] as List<dynamic>;
+      Log.i('MEDIA', '[1/3] 인텐트 수신 완료: ${uploadItems.length}개');
+      for (final item in uploadItems) {
+        Log.i('MEDIA', '  upload_url=${item['upload_url']}  media_url=${item['media_url']}');
+      }
+
+      // 2. 파일을 상대 경로(upload_url)로 PUT 업로드
+      Log.i('MEDIA', '[2/3] 파일 업로드 시작');
+      for (int i = 0; i < files.length; i++) {
+        final item = uploadItems[i] as Map<String, dynamic>;
+        final uploadPath = item['upload_url'] as String;
+        final mime = fileInfos[i]['mime_type'] as String;
+        Log.i('MEDIA', '  [${i + 1}/${files.length}] $uploadPath');
+        await ApiClient.uploadFile(uploadPath, files[i].path, mime);
+      }
+      Log.i('MEDIA', '[2/3] 업로드 완료');
+
+      // 3. 메시지 전송 — media_url은 /media/... 형태, 표시 시 kBaseUrl 조합
       final mediaItems = uploadItems.map((item) {
-        return {
-          'url': item['media_url'] as String,
-          'mime_type': item['mime_type'] as String,
-        };
+        final url = item['media_url'] as String;
+        Log.i('MEDIA', '  DB에 저장될 media_url=$url  (표시 URL: $kBaseUrl$url)');
+        return {'url': url, 'mime_type': item['mime_type'] as String};
       }).toList();
 
+      Log.i('MEDIA', '[3/3] 메시지 전송');
       await ApiClient.sendMediaMessage(
         auth.accessToken!,
         chat.chatId!,
         permissionType,
         mediaItems.cast<Map<String, String>>(),
       );
+      Log.i('MEDIA', '미디어 전송 완료 ✓');
 
       await chat.refreshMessages();
-    } on ApiException catch (e) {
+    } catch (e, st) {
+      Log.e('MEDIA', '미디어 전송 실패', e, st);
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('미디어 전송 실패: ${e.message}')));
+      final msg = e is ApiException ? e.message : '네트워크 오류가 발생했습니다.';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('미디어 전송 실패: $msg')),
+      );
     }
   }
 
@@ -518,16 +542,19 @@ class _MediaContent extends StatelessWidget {
             return ClipRRect(
               borderRadius: BorderRadius.circular(10),
               child: Image.network(
-                m.url,
+                '$kBaseUrl${m.url}',
                 width: 120,
                 height: 120,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(
-                  width: 120,
-                  height: 120,
-                  color: Colors.grey[200],
-                  child: const Icon(Icons.broken_image, color: Colors.grey),
-                ),
+                errorBuilder: (context, error, stack) {
+                  Log.e('IMAGE', '이미지 로드 실패: $kBaseUrl${m.url}', error, stack);
+                  return Container(
+                    width: 120,
+                    height: 120,
+                    color: Colors.grey[200],
+                    child: const Icon(Icons.broken_image, color: Colors.grey),
+                  );
+                },
               ),
             );
           }).toList(),

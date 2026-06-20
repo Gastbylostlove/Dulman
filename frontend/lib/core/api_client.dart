@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'constants.dart';
+import 'logger.dart';
 
 class ApiException implements Exception {
   final String code;
@@ -20,16 +22,30 @@ class ApiClient {
     String? accessToken,
   }) async {
     final uri = Uri.parse('$kBaseUrl$path');
-    final headers = <String, String>{
-      'Content-Type': 'application/json; charset=utf-8',
-      if (accessToken != null) 'Authorization': 'Bearer $accessToken',
-    };
-    final response = await _client.post(
-      uri,
-      headers: headers,
-      body: body != null ? jsonEncode(body) : null,
-    );
-    return _parse(response);
+    Log.i('API', 'POST $path');
+    final sw = Stopwatch()..start();
+    try {
+      final headers = <String, String>{
+        'Content-Type': 'application/json; charset=utf-8',
+        if (accessToken != null) 'Authorization': 'Bearer $accessToken',
+      };
+      final response = await _client.post(
+        uri,
+        headers: headers,
+        body: body != null ? jsonEncode(body) : null,
+      );
+      sw.stop();
+      Log.i('API', 'POST $path → ${response.statusCode} (${sw.elapsedMilliseconds}ms)');
+      return _parse(response);
+    } on SocketException catch (e, st) {
+      sw.stop();
+      Log.e('API', 'POST $path → 네트워크 연결 실패 (${sw.elapsedMilliseconds}ms)\n  URL: $uri', e, st);
+      rethrow;
+    } catch (e, st) {
+      sw.stop();
+      Log.e('API', 'POST $path → 예외 발생 (${sw.elapsedMilliseconds}ms)', e, st);
+      rethrow;
+    }
   }
 
   static Future<Map<String, dynamic>> _get(
@@ -38,25 +54,71 @@ class ApiClient {
     required String accessToken,
   }) async {
     final uri = Uri.parse('$kBaseUrl$path').replace(queryParameters: query);
-    final response = await _client.get(
-      uri,
-      headers: {
-        'Authorization': 'Bearer $accessToken',
-      },
-    );
-    return _parse(response);
+    Log.i('API', 'GET $path');
+    final sw = Stopwatch()..start();
+    try {
+      final response = await _client.get(
+        uri,
+        headers: {'Authorization': 'Bearer $accessToken'},
+      );
+      sw.stop();
+      Log.i('API', 'GET $path → ${response.statusCode} (${sw.elapsedMilliseconds}ms)');
+      return _parse(response);
+    } on SocketException catch (e, st) {
+      sw.stop();
+      Log.e('API', 'GET $path → 네트워크 연결 실패 (${sw.elapsedMilliseconds}ms)\n  URL: $uri', e, st);
+      rethrow;
+    } catch (e, st) {
+      sw.stop();
+      Log.e('API', 'GET $path → 예외 발생 (${sw.elapsedMilliseconds}ms)', e, st);
+      rethrow;
+    }
   }
 
   static Map<String, dynamic> _parse(http.Response response) {
     final body = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
     if (response.statusCode >= 400) {
       final err = body['error'] as Map<String, dynamic>? ?? {};
-      throw ApiException(
-        err['code']?.toString() ?? 'UNKNOWN',
-        err['message']?.toString() ?? '오류가 발생했습니다.',
-      );
+      final code = err['code']?.toString() ?? 'UNKNOWN';
+      final message = err['message']?.toString() ?? '오류가 발생했습니다.';
+      Log.w('API', 'Error [$code] $message');
+      throw ApiException(code, message);
     }
     return body;
+  }
+
+  // 파일을 서버에 PUT 업로드 (uploadPath는 /uploads/... 형태의 상대 경로)
+  static Future<void> uploadFile(
+    String uploadPath,
+    String filePath,
+    String mimeType,
+  ) async {
+    final url = '$kBaseUrl$uploadPath';
+    Log.i('UPLOAD', 'PUT $uploadPath  mime=$mimeType  src=$filePath');
+    final sw = Stopwatch()..start();
+    try {
+      final bytes = await File(filePath).readAsBytes();
+      Log.i('UPLOAD', '파일 읽기 완료: ${bytes.length} bytes');
+      final response = await _client.put(
+        Uri.parse(url),
+        headers: {'Content-Type': mimeType},
+        body: bytes,
+      );
+      sw.stop();
+      if (response.statusCode >= 400) {
+        Log.e('UPLOAD', 'PUT $uploadPath → ${response.statusCode} (${sw.elapsedMilliseconds}ms)');
+        throw ApiException('UPLOAD_FAILED', '파일 업로드에 실패했습니다. (${response.statusCode})');
+      }
+      Log.i('UPLOAD', 'PUT $uploadPath → ${response.statusCode} (${sw.elapsedMilliseconds}ms) ✓');
+    } on SocketException catch (e, st) {
+      sw.stop();
+      Log.e('UPLOAD', 'PUT $uploadPath → 네트워크 연결 실패 (${sw.elapsedMilliseconds}ms)\n  대상 URL: $url', e, st);
+      rethrow;
+    } catch (e, st) {
+      sw.stop();
+      Log.e('UPLOAD', 'PUT $uploadPath → 예외 발생 (${sw.elapsedMilliseconds}ms)', e, st);
+      rethrow;
+    }
   }
 
   // ── Auth ──────────────────────────────────────────────────────────────────
