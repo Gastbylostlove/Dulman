@@ -7,6 +7,7 @@ import { cleanupTestData } from "./integration-utils.js";
 
 const config = getAppConfig();
 const integration = config.databaseUrl ? test : test.skip;
+const keepIntegrationData = process.env.POSTGRES_INTEGRATION_KEEP_DATA === "1" || process.env.POSTGRES_INTEGRATION_KEEP_DATA === "true";
 
 integration("Postgres repository persists the documented chat flow", async () => {
   const repository = await createPostgresRepository({
@@ -62,7 +63,9 @@ integration("Postgres repository persists the documented chat flow", async () =>
     const messages = await service.listMessages(aliceLogin.access_token, { chat_id: chat.chat_id });
     assert.equal(messages.messages.length, 0);
   } finally {
-    await cleanupTestData(repository.pool, prefix);
+    if (!keepIntegrationData) {
+      await cleanupTestData(repository.pool, prefix);
+    }
     await repository.close();
   }
 });

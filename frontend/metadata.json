@@ -1,0 +1,6 @@
+{
+  "name": "시큐어커플 - SecureCouple",
+  "description": "우리들만의 디지털 안식처 '시큐어커플'의 고품격 인터랙티브 Flutter 모바일 앱 프로토타입 시뮬레이터",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,17 +1,20 @@
 import assert from "node:assert/strict";
-import test, { after, before } from "node:test";
+import test, { after, before, describe } from "node:test";
 import { getAppConfig } from "../src/config/env.js";
 import { createPostgresRepository } from "../src/db/postgres.js";
 import { startServer } from "../src/server.js";
 import { cleanupTestData } from "./integration-utils.js";
 
 const config = getAppConfig();
+const integration = config.databaseUrl ? describe : describe.skip;
 const originalPort = process.env.PORT;
 const keepIntegrationData = process.env.HTTP_INTEGRATION_KEEP_DATA === "1" || process.env.HTTP_INTEGRATION_KEEP_DATA === "true";
 
 let repository;
 let server;
 let baseUrl;
+
+integration("HTTP integration", () => {
 
 before(async () => {
   process.env.PORT = "0";
@@ -896,3 +899,5 @@ test("HTTP messages enforce participant, state, and payload requirements", async
     assertHttpError(mediaAfterTermination, 409, "CHAT_NOT_ACTIVE");
   });
 });
+
+}); // integration
