@@ -1,0 +1,14 @@
+{
+  "name": "dulman",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test",
+    "test:http:keep-data": "HTTP_INTEGRATION_KEEP_DATA=true node --test test/http.integration.test.js"
+  },
+  "dependencies": {
+    "pg": "^8.22.0"
+  }
+}
