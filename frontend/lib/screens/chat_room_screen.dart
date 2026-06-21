@@ -12,9 +12,6 @@ import '../core/logger.dart';
 import 'auth_screen.dart';
 import 'onboarding_screen.dart';
 
-// FLAG_SECURE 제어용 MethodChannel (Android 캡처 차단)
-const _windowChannel = MethodChannel('com.dulman/window_flags');
-
 class ChatRoomScreen extends StatefulWidget {
   const ChatRoomScreen({super.key});
 
@@ -30,29 +27,15 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   @override
   void initState() {
     super.initState();
-    _applySecureFlag(true);
     context.read<ChatProvider>().addListener(_onChatChange);
   }
 
   @override
   void dispose() {
-    _applySecureFlag(false);
     context.read<ChatProvider>().removeListener(_onChatChange);
     _textCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
-  }
-
-  Future<void> _applySecureFlag(bool secure) async {
-    try {
-      if (secure) {
-        await _windowChannel.invokeMethod('addSecureFlag');
-      } else {
-        await _windowChannel.invokeMethod('clearSecureFlag');
-      }
-    } catch (_) {
-      // 에뮬레이터 또는 iOS에서는 무시
-    }
   }
 
   void _onChatChange() {
