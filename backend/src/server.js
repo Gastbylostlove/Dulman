@@ -70,6 +70,25 @@ export async function startServer() {
     }
 
     try {
+      // APK 다운로드: GET /dulman.apk
+      if (req.method === "GET" && url.pathname === "/dulman.apk") {
+        const { promises: fs } = await import("node:fs");
+        const { default: path } = await import("node:path");
+        const apkPath = path.join(process.cwd(), "dulman.apk");
+        try {
+          const bytes = await fs.readFile(apkPath);
+          res.writeHead(200, {
+            "Content-Type": "application/vnd.android.package-archive",
+            "Content-Disposition": "attachment; filename=dulman.apk",
+            "Content-Length": bytes.byteLength,
+          });
+          res.end(bytes);
+        } catch {
+          res.writeHead(404); res.end();
+        }
+        return;
+      }
+
       // 파일 업로드: PUT /uploads/:chatId/:fileId → S3
       if (req.method === "PUT" && url.pathname.startsWith("/uploads/")) {
         const parts = url.pathname.split("/").filter(Boolean);

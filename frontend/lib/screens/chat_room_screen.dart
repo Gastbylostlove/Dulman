@@ -483,8 +483,6 @@ class _MediaContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final previews = message.media.take(4).toList();
-
     if (message.media.isEmpty) {
       return Container(
         padding: const EdgeInsets.all(14),
@@ -507,15 +505,23 @@ class _MediaContent extends StatelessWidget {
     }
 
     final chat = context.read<ChatProvider>();
+    final isRestricted =
+        message.permissionType == 'once' || message.permissionType == 'replay_once';
 
+    // once / replay_once: 썸네일 없이 열람 버튼만 표시
+    if (isRestricted) {
+      return _RestrictedMediaButton(message: message, chat: chat);
+    }
+
+    // keep: 기존 썸네일 그리드
+    final previews = message.media.take(4).toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 권한 배지
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
-            color: const Color(0xFFAE2F34),
+            color: const Color(0xFF2E7D32),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(
@@ -528,7 +534,6 @@ class _MediaContent extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 4),
-        // 미디어 그리드 (최대 4개 미리보기)
         Wrap(
           spacing: 4,
           runSpacing: 4,
@@ -550,20 +555,120 @@ class _MediaContent extends StatelessWidget {
               style: const TextStyle(color: Colors.grey, fontSize: 12),
             ),
           ),
-        if (!message.canView)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            margin: const EdgeInsets.only(top: 4),
-            decoration: BoxDecoration(
-              color: Colors.black87,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Text(
-              '열람 횟수 초과',
-              style: TextStyle(color: Colors.white, fontSize: 12),
+      ],
+    );
+  }
+}
+
+// once / replay_once 전용 열람 버튼
+class _RestrictedMediaButton extends StatelessWidget {
+  final Message message;
+  final ChatProvider chat;
+
+  const _RestrictedMediaButton({required this.message, required this.chat});
+
+  @override
+  Widget build(BuildContext context) {
+    final canView = message.canView;
+    final isVideo = message.media.isNotEmpty &&
+        message.media.first.mimeType.startsWith('video');
+    final count = message.media.length;
+
+    final String label;
+    if (!canView) {
+      label = '열람 횟수 초과';
+    } else if (isVideo) {
+      label = '동영상 보기';
+    } else if (count > 1) {
+      label = '사진 ${count}장 보기';
+    } else {
+      label = '사진 보기';
+    }
+
+    final badgeColor = message.permissionType == 'once'
+        ? const Color(0xFFB71C1C)
+        : const Color(0xFFE65100);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // 권한 배지
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: badgeColor,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            message.permissionLabel,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
             ),
           ),
+        ),
+        const SizedBox(height: 8),
+        // 열람 버튼
+        GestureDetector(
+          onTap: canView ? () => _open(context) : null,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              color: canView ? const Color(0xFF0084FF) : Colors.grey[300],
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  canView
+                      ? (isVideo
+                          ? Icons.play_circle_filled
+                          : Icons.photo_rounded)
+                      : Icons.lock_outline_rounded,
+                  color: canView ? Colors.white : Colors.grey,
+                  size: 16,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: canView ? Colors.white : Colors.grey,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ],
+    );
+  }
+
+  Future<void> _open(BuildContext context) async {
+    final mediaUrls = message.media.map(_resolveMediaUrl).toList();
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+
+    final err = await chat.accessMedia(message.id);
+    if (!navigator.mounted || !messenger.mounted) return;
+    if (err != null) {
+      messenger.showSnackBar(SnackBar(content: Text(err)));
+      return;
+    }
+
+    if (!navigator.mounted) return;
+    await navigator.push(
+      MaterialPageRoute(
+        builder: (_) => _MediaViewerScreen(
+          mediaUrls: mediaUrls,
+          initialIndex: 0,
+          permissionLabel: message.permissionLabel,
+        ),
+      ),
     );
   }
 }
