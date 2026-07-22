@@ -23,6 +23,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   final _textCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
   final _picker = ImagePicker();
+  int _lastMarkedMessageId = 0;
 
   @override
   void initState() {
@@ -49,7 +50,14 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       return;
     }
     // 새 메시지 도착 시 스크롤
-    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToBottom();
+      final lastMessageId = chat.messages.isEmpty ? 0 : chat.messages.last.id;
+      if (mounted && lastMessageId > _lastMarkedMessageId) {
+        _lastMarkedMessageId = lastMessageId;
+        context.read<ChatProvider>().markRead();
+      }
+    });
   }
 
   void _handleForcedLogout() async {
@@ -294,7 +302,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
             ),
             const Text(
-              '🔒 E2EE 보호 중',
+              'Supabase Realtime 연결',
               style: TextStyle(fontSize: 11, color: Color(0xFFAE2F34)),
             ),
           ],
@@ -355,6 +363,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                       return _MessageBubble(
                         message: msg,
                         isMe: msg.senderId == myId,
+                        isRead: msg.senderId == myId && chat.isMessageRead(msg.id),
                       );
                     },
                   ),
@@ -377,8 +386,13 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
 class _MessageBubble extends StatelessWidget {
   final Message message;
   final bool isMe;
+  final bool isRead;
 
-  const _MessageBubble({required this.message, required this.isMe});
+  const _MessageBubble({
+    required this.message,
+    required this.isMe,
+    required this.isRead,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -453,9 +467,20 @@ class _MessageBubble extends StatelessWidget {
                       : _MediaContent(message: message),
                 ),
                 const SizedBox(height: 3),
-                Text(
-                  time,
-                  style: const TextStyle(fontSize: 10, color: Colors.grey),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isRead)
+                      const Text(
+                        '읽음',
+                        style: TextStyle(fontSize: 10, color: Colors.grey),
+                      ),
+                    if (isRead) const SizedBox(width: 4),
+                    Text(
+                      time,
+                      style: const TextStyle(fontSize: 10, color: Colors.grey),
+                    ),
+                  ],
                 ),
               ],
             ),

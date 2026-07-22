@@ -1,8 +1,8 @@
-import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../core/api_client.dart';
 import '../core/constants.dart';
 import '../core/logger.dart';
+import '../core/supabase_client.dart';
 import '../models/models.dart';
 import 'auth_provider.dart';
 
@@ -13,7 +13,8 @@ class ChatProvider extends ChangeNotifier {
   String? _inviteCode;
   ChatState _state = ChatState.idle;
   List<Message> _messages = [];
-  Timer? _pollTimer;
+  RealtimeChannel? _realtimeChannel;
+  int _partnerLastReadMessageId = 0;
   String? _accessToken;
   String? _sendError;
   bool _isSending = false;
@@ -29,6 +30,8 @@ class ChatProvider extends ChangeNotifier {
   bool get isSending => _isSending;
   bool get forcedLogout => _forcedLogout;
 
+  bool isMessageRead(int messageId) => messageId <= _partnerLastReadMessageId;
+
   void updateAuth(AuthProvider authProvider) {
     _accessToken = authProvider.accessToken;
   }
@@ -43,7 +46,7 @@ class ChatProvider extends ChangeNotifier {
       _inviteCode = result['invite_code'] as String;
       _state = ChatState.waiting;
       Log.i('CHAT', '채팅방 생성됨: chatId=$_chatId  inviteCode=$_inviteCode');
-      _startPollingForPartner();
+      _subscribeToChat();
       notifyListeners();
       return true;
     } on ApiException catch (e) {
@@ -76,10 +79,11 @@ class ChatProvider extends ChangeNotifier {
       _state = status == 'active' ? ChatState.active : ChatState.waiting;
       Log.i('CHAT', 'loadActiveChat: chatId=$_chatId  status=$status → state=$_state');
       if (_state == ChatState.active) {
-        await _loadMessages();
-        _startPolling();
+        await _loadMessages(replace: true);
+        await _loadPartnerReadState();
+        _subscribeToChat();
       } else {
-        _startPollingForPartner();
+        _subscribeToChat();
       }
       notifyListeners();
     } on ApiException catch (e) {
@@ -101,8 +105,9 @@ class ChatProvider extends ChangeNotifier {
       _inviteCode = null;
       _state = ChatState.active;
       Log.i('CHAT', 'joinChat 성공: chatId=$_chatId');
-      await _loadMessages();
-      _startPolling();
+      await _loadMessages(replace: true);
+      await _loadPartnerReadState();
+      _subscribeToChat();
       notifyListeners();
       return null;
     } on ApiException catch (e) {
@@ -128,7 +133,6 @@ class ChatProvider extends ChangeNotifier {
 
     try {
       await ApiClient.sendText(_accessToken!, _chatId!, text.trim());
-      await _loadMessages();
       Log.i('CHAT', 'sendText 완료');
     } on ApiException catch (e) {
       Log.e('CHAT', 'sendText 실패: [${e.code}] ${e.message}');
@@ -168,7 +172,8 @@ class ChatProvider extends ChangeNotifier {
     Log.i('CHAT', 'resetChat: chatId=$_chatId');
     try {
       await ApiClient.resetChat(_accessToken!, _chatId!);
-      await _loadMessages();
+      _messages = [];
+      await _loadMessages(replace: true);
       notifyListeners();
       Log.i('CHAT', 'resetChat 완료');
       return null;
@@ -204,6 +209,27 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> markRead() async {
+    if (_accessToken == null || _chatId == null || _messages.isEmpty) return;
+    try {
+      await ApiClient.markChatRead(_accessToken!, _chatId!, _messages.last.id);
+    } on ApiException catch (e) {
+      Log.w('CHAT', '읽음 상태 반영 실패: [${e.code}]');
+    }
+  }
+
+  Future<void> _loadPartnerReadState() async {
+    if (_accessToken == null || _chatId == null) return;
+    try {
+      _partnerLastReadMessageId = await ApiClient.getPartnerLastReadMessageId(
+        _accessToken!,
+        _chatId!,
+      );
+    } on ApiException catch (e) {
+      Log.w('CHAT', '상대방 읽음 상태 조회 실패: [${e.code}]');
+    }
+  }
+
   void clearForcedLogout() {
     _forcedLogout = false;
     notifyListeners();
@@ -216,17 +242,27 @@ class ChatProvider extends ChangeNotifier {
 
   // ── 내부 ───────────────────────────────────────────────────────────────────
 
-  Future<void> _loadMessages() async {
+  Future<void> _loadMessages({bool replace = false}) async {
     if (_accessToken == null || _chatId == null) return;
     try {
-      final result = await ApiClient.listMessages(_accessToken!, _chatId!);
+      final result = await ApiClient.listMessages(
+        _accessToken!,
+        _chatId!,
+        afterMessageId: replace || _messages.isEmpty ? null : _messages.last.id,
+      );
       final list = (result['messages'] as List<dynamic>)
           .map((m) => Message.fromJson(m as Map<String, dynamic>))
           .toList();
-      if (list.length != _messages.length) {
-        Log.i('CHAT', '_loadMessages: ${_messages.length} → ${list.length}개 메시지');
+      if (replace) {
+        _messages = list;
+      } else if (list.isNotEmpty) {
+        final byId = {for (final message in _messages) message.id: message};
+        for (final message in list) {
+          byId[message.id] = message;
+        }
+        _messages = byId.values.toList()..sort((a, b) => a.id.compareTo(b.id));
       }
-      _messages = list;
+      if (list.isNotEmpty) Log.i('CHAT', '_loadMessages: ${list.length}개 추가/갱신');
     } on ApiException catch (e) {
       Log.e('CHAT', '_loadMessages 실패: [${e.code}] ${e.message}');
       if (e.code == kErrDeviceReplaced) {
@@ -234,58 +270,84 @@ class ChatProvider extends ChangeNotifier {
         notifyListeners();
       } else if (e.code == 'CHAT_NOT_ACTIVE') {
         _state = ChatState.ended;
-        _stopPolling();
+        _stopRealtime();
         notifyListeners();
       }
     }
   }
 
-  // 파트너 참여 대기 폴링 (3초마다 chat status 확인)
-  void _startPollingForPartner() {
-    _pollTimer?.cancel();
-    Log.i('CHAT', '파트너 대기 폴링 시작 (3s)');
-    _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
-      if (_accessToken == null) return;
-      try {
-        final result = await ApiClient.getActiveChat(_accessToken!);
-        final status = result['status'] as String?;
-        if (status == 'active') {
-          Log.i('CHAT', '파트너 입장 감지 → active 전환');
+  void _subscribeToChat() {
+    _stopRealtime();
+    final chatId = _chatId;
+    if (chatId == null) return;
+
+    final channel = supabaseClient.channel(
+      'private-chat:$chatId',
+      opts: const RealtimeChannelConfig(private: true),
+    );
+    channel.onPostgresChanges(
+      event: PostgresChangeEvent.insert,
+      schema: 'public',
+      table: 'message',
+      filter: PostgresChangeFilter(
+        type: PostgresChangeFilterType.eq,
+        column: 'chat_id',
+        value: chatId,
+      ),
+      callback: (_) async {
+        await _loadMessages();
+        notifyListeners();
+      },
+    );
+    channel.onPostgresChanges(
+      event: PostgresChangeEvent.update,
+      schema: 'public',
+      table: 'chat',
+      filter: PostgresChangeFilter(
+        type: PostgresChangeFilterType.eq,
+        column: 'id',
+        value: chatId,
+      ),
+      callback: (payload) async {
+        final status = payload.newRecord['status'] as String?;
+        if (status == 'active' && _state != ChatState.active) {
           _state = ChatState.active;
-          _pollTimer?.cancel();
-          await _loadMessages();
-          _startPolling();
-          notifyListeners();
+          _messages = [];
+          await _loadMessages(replace: true);
+        } else if (status == 'ended') {
+          _state = ChatState.ended;
         }
-      } on ApiException catch (e) {
-        Log.e('CHAT', '파트너 폴링 에러: [${e.code}] ${e.message}');
-        if (e.code == kErrDeviceReplaced) {
-          _forcedLogout = true;
-          _pollTimer?.cancel();
-          notifyListeners();
-        }
-      }
-    });
+        notifyListeners();
+      },
+    );
+    channel.onPostgresChanges(
+      event: PostgresChangeEvent.all,
+      schema: 'public',
+      table: 'chat_read_state',
+      filter: PostgresChangeFilter(
+        type: PostgresChangeFilterType.eq,
+        column: 'chat_id',
+        value: chatId,
+      ),
+      callback: (_) async {
+        await _loadPartnerReadState();
+        notifyListeners();
+      },
+    );
+    _realtimeChannel = channel..subscribe();
+    Log.i('CHAT', 'Realtime 구독 시작: chatId=$chatId');
   }
 
-  // 메시지 폴링 (3초마다)
-  void _startPolling() {
-    _pollTimer?.cancel();
-    Log.i('CHAT', '메시지 폴링 시작 (3s)  chatId=$_chatId');
-    _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
-      await _loadMessages();
-      notifyListeners();
-    });
-  }
-
-  void _stopPolling() {
-    Log.i('CHAT', '폴링 중단');
-    _pollTimer?.cancel();
-    _pollTimer = null;
+  void _stopRealtime() {
+    final channel = _realtimeChannel;
+    if (channel != null) {
+      supabaseClient.removeChannel(channel);
+      _realtimeChannel = null;
+    }
   }
 
   void _endChat() {
-    _stopPolling();
+    _stopRealtime();
     Log.i('CHAT', '채팅 종료: chatId=$_chatId → idle');
     _chatId = null;
     _inviteCode = null;
@@ -296,7 +358,7 @@ class ChatProvider extends ChangeNotifier {
 
   @override
   void dispose() {
-    _pollTimer?.cancel();
+    _stopRealtime();
     super.dispose();
   }
 }
