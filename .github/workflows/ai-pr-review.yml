@@ -1,0 +1,38 @@
+name: AI PR Review
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  checks: write
+
+jobs:
+  review:
+    if: >-
+      github.event.issue.pull_request != null &&
+      (contains(github.event.comment.body, '@codex') || contains(github.event.comment.body, '@claude'))
+    runs-on: ubuntu-latest
+    steps:
+      # Only the base branch is checked out. PR code is read through the GitHub API.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 1
+
+      - name: Run selected AI reviewer
+        run: node .github/ci/pr-review.mjs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_API_URL: ${{ github.api_url }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_USER: ${{ github.event.comment.user.login }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CODEX_MODEL: ${{ vars.CODEX_MODEL }}
+          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
