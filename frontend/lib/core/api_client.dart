@@ -57,20 +57,20 @@ class ApiClient {
     int limit = 50,
   }) async {
     try {
-      final chat = await supabaseClient
+      // 참여자 여부만 확인 (last_reset_at 필터는 RLS에서 처리)
+      final chatExists = await supabaseClient
           .from('chat')
-          .select('last_reset_at')
+          .select('id')
           .eq('id', chatId)
           .maybeSingle();
-      if (chat == null) throw ApiException('CHAT_NOT_FOUND', '채팅방을 찾을 수 없습니다.');
+      if (chatExists == null) throw ApiException('CHAT_NOT_FOUND', '채팅방을 찾을 수 없습니다.');
 
       var query = supabaseClient
           .from('message')
           .select()
           .eq('chat_id', chatId);
       if (afterMessageId != null) query = query.gt('id', afterMessageId);
-      final lastResetAt = chat['last_reset_at'] as String?;
-      if (lastResetAt != null) query = query.gt('created_at', lastResetAt);
+      // last_reset_at 필터는 RLS(message_select_participant)가 서버에서 처리
       final rows = await query.order('id', ascending: true).limit(limit.clamp(1, 100));
 
       final messages = <Map<String, dynamic>>[];
