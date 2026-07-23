@@ -1,23 +1,38 @@
 import 'dart:io';
 
+import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:path_provider/path_provider.dart';
 
-class LocalDatabase {
+class LocalDatabase implements QueryExecutorUser {
   LocalDatabase._(this._executor);
 
-  final NativeDatabase _executor;
+  final QueryExecutor _executor;
+
+  @override
+  int get schemaVersion => 1;
+
+  @override
+  Future<void> beforeOpen(QueryExecutor executor, OpeningDetails details) async {
+    // _BeforeOpeningExecutor는 ensureOpen 호출 시 open 상태로 표시됨
+    await executor.ensureOpen(this);
+    if (details.wasCreated || details.hadUpgrade) {
+      await _createSchema(executor);
+    }
+  }
 
   static Future<LocalDatabase> open() async {
     final directory = await getApplicationDocumentsDirectory();
-    final executor = NativeDatabase(File('${directory.path}/dulman.sqlite3'));
+    final executor = LazyDatabase(() async {
+      return NativeDatabase(File('${directory.path}/dulman.sqlite3'));
+    });
     final database = LocalDatabase._(executor);
-    await database._initialize();
+    await executor.ensureOpen(database);
     return database;
   }
 
-  Future<void> _initialize() async {
-    await _executor.runCustom('''
+  Future<void> _createSchema(QueryExecutor executor) async {
+    await executor.runCustom('''
       CREATE TABLE IF NOT EXISTS chat_messages (
         id INTEGER PRIMARY KEY,
         chat_id INTEGER NOT NULL,
@@ -27,11 +42,11 @@ class LocalDatabase {
         created_at TEXT NOT NULL
       )
     ''');
-    await _executor.runCustom('''
+    await executor.runCustom('''
       CREATE VIRTUAL TABLE IF NOT EXISTS chat_messages_fts
       USING fts5(text_content, id UNINDEXED, chat_id UNINDEXED)
     ''');
-    await _executor.runCustom('''
+    await executor.runCustom('''
       CREATE INDEX IF NOT EXISTS idx_chat_messages_chat_id_id
       ON chat_messages(chat_id, id)
     ''');
