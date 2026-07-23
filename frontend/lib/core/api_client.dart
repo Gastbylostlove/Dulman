@@ -54,7 +54,9 @@ class ApiClient {
     String accessToken,
     int chatId, {
     int? afterMessageId,
+    int? beforeMessageId,
     int limit = 50,
+    bool descending = false,
   }) async {
     try {
       // 참여자 여부만 확인 (last_reset_at 필터는 RLS에서 처리)
@@ -70,8 +72,11 @@ class ApiClient {
           .select()
           .eq('chat_id', chatId);
       if (afterMessageId != null) query = query.gt('id', afterMessageId);
+      if (beforeMessageId != null) query = query.lt('id', beforeMessageId);
       // last_reset_at 필터는 RLS(message_select_participant)가 서버에서 처리
-      final rows = await query.order('id', ascending: true).limit(limit.clamp(1, 100));
+      final rows = await query
+          .order('id', ascending: !descending)
+          .limit(limit.clamp(1, 100));
 
       final messages = <Map<String, dynamic>>[];
       final ids = <int>[];

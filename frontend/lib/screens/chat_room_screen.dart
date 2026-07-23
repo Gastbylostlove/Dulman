@@ -29,14 +29,22 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   void initState() {
     super.initState();
     context.read<ChatProvider>().addListener(_onChatChange);
+    _scrollCtrl.addListener(_onScroll);
   }
 
   @override
   void dispose() {
     context.read<ChatProvider>().removeListener(_onChatChange);
+    _scrollCtrl.removeListener(_onScroll);
     _textCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollCtrl.position.pixels <= 80) {
+      context.read<ChatProvider>().loadOlderMessages();
+    }
   }
 
   void _onChatChange() {
@@ -357,9 +365,24 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                       horizontal: 16,
                       vertical: 12,
                     ),
-                    itemCount: chat.messages.length,
+                    itemCount: chat.messages.length + (chat.hasOlderMessages ? 1 : 0),
                     itemBuilder: (_, i) {
-                      final msg = chat.messages[i];
+                      if (chat.hasOlderMessages && i == 0) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Center(
+                            child: chat.isLoadingOlder
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                : const SizedBox.shrink(),
+                          ),
+                        );
+                      }
+                      final msgIndex = chat.hasOlderMessages ? i - 1 : i;
+                      final msg = chat.messages[msgIndex];
                       return _MessageBubble(
                         message: msg,
                         isMe: msg.senderId == myId,

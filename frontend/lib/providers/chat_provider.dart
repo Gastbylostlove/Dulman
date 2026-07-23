@@ -21,6 +21,8 @@ class ChatProvider extends ChangeNotifier {
 
   // 상대방이 강제 로그아웃 처리됐는지 (AUTH_DEVICE_REPLACED)
   bool _forcedLogout = false;
+  bool _hasOlderMessages = false;
+  bool _isLoadingOlder = false;
 
   int? get chatId => _chatId;
   String? get inviteCode => _inviteCode;
@@ -29,6 +31,8 @@ class ChatProvider extends ChangeNotifier {
   String? get sendError => _sendError;
   bool get isSending => _isSending;
   bool get forcedLogout => _forcedLogout;
+  bool get hasOlderMessages => _hasOlderMessages;
+  bool get isLoadingOlder => _isLoadingOlder;
 
   bool isMessageRead(int messageId) => messageId <= _partnerLastReadMessageId;
 
@@ -242,18 +246,57 @@ class ChatProvider extends ChangeNotifier {
 
   // ── 내부 ───────────────────────────────────────────────────────────────────
 
-  Future<void> _loadMessages({bool replace = false}) async {
+  // 이전 메시지 더 불러오기 (위로 스크롤 시 호출)
+  Future<void> loadOlderMessages() async {
     if (_accessToken == null || _chatId == null) return;
+    if (!_hasOlderMessages || _isLoadingOlder || _messages.isEmpty) return;
+    _isLoadingOlder = true;
+    notifyListeners();
     try {
       final result = await ApiClient.listMessages(
         _accessToken!,
         _chatId!,
-        afterMessageId: replace || _messages.isEmpty ? null : _messages.last.id,
+        beforeMessageId: _messages.first.id,
+        descending: true,
       );
       final list = (result['messages'] as List<dynamic>)
           .map((m) => Message.fromJson(m as Map<String, dynamic>))
+          .toList()
+          .reversed
           .toList();
-      if (replace) {
+      _hasOlderMessages = list.length >= 50;
+      if (list.isNotEmpty) {
+        final byId = {for (final m in list) m.id: m};
+        for (final m in _messages) { byId[m.id] = m; }
+        _messages = byId.values.toList()..sort((a, b) => a.id.compareTo(b.id));
+        Log.i('CHAT', 'loadOlderMessages: ${list.length}개 선행 추가');
+      }
+    } on ApiException catch (e) {
+      Log.e('CHAT', 'loadOlderMessages 실패: [${e.code}] ${e.message}');
+    } finally {
+      _isLoadingOlder = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _loadMessages({bool replace = false}) async {
+    if (_accessToken == null || _chatId == null) return;
+    try {
+      // 초기 로드는 최신 메시지부터 (DESC), 이후 증분 로드는 ASC
+      final isInitial = replace || _messages.isEmpty;
+      final result = await ApiClient.listMessages(
+        _accessToken!,
+        _chatId!,
+        afterMessageId: isInitial ? null : _messages.last.id,
+        descending: isInitial,
+      );
+      var list = (result['messages'] as List<dynamic>)
+          .map((m) => Message.fromJson(m as Map<String, dynamic>))
+          .toList();
+      if (isInitial) {
+        // DESC로 받았으므로 역전해서 시간 오름차순으로 표시
+        list = list.reversed.toList();
+        _hasOlderMessages = list.length >= 50;
         _messages = list;
       } else if (list.isNotEmpty) {
         final byId = {for (final message in _messages) message.id: message};
