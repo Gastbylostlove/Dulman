@@ -3,12 +3,17 @@ import '../core/api_client.dart';
 import '../core/constants.dart';
 import '../core/logger.dart';
 import '../core/supabase_client.dart';
+import '../data/local_database.dart';
 import '../models/models.dart';
 import 'auth_provider.dart';
 
 enum ChatState { idle, waiting, active, ended }
 
 class ChatProvider extends ChangeNotifier {
+  ChatProvider(this._localDb);
+
+  final LocalDatabase _localDb;
+
   int? _chatId;
   String? _inviteCode;
   ChatState _state = ChatState.idle;
@@ -305,7 +310,10 @@ class ChatProvider extends ChangeNotifier {
         }
         _messages = byId.values.toList()..sort((a, b) => a.id.compareTo(b.id));
       }
-      if (list.isNotEmpty) Log.i('CHAT', '_loadMessages: ${list.length}개 추가/갱신');
+      if (list.isNotEmpty) {
+        Log.i('CHAT', '_loadMessages: ${list.length}개 추가/갱신');
+        _cacheMessages(list);
+      }
     } on ApiException catch (e) {
       Log.e('CHAT', '_loadMessages 실패: [${e.code}] ${e.message}');
       if (e.code == kErrDeviceReplaced) {
@@ -316,6 +324,21 @@ class ChatProvider extends ChangeNotifier {
         _stopRealtime();
         notifyListeners();
       }
+    }
+  }
+
+  void _cacheMessages(List<Message> messages) {
+    final chatId = _chatId;
+    if (chatId == null) return;
+    for (final msg in messages) {
+      _localDb.cacheMessage(
+        id: msg.id,
+        chatId: chatId,
+        senderId: msg.senderId,
+        type: msg.type,
+        textContent: msg.textContent,
+        createdAt: msg.createdAt.toIso8601String(),
+      );
     }
   }
 
@@ -337,9 +360,20 @@ class ChatProvider extends ChangeNotifier {
         column: 'chat_id',
         value: chatId,
       ),
-      callback: (_) async {
-        await _loadMessages();
-        notifyListeners();
+      callback: (payload) async {
+        final record = payload.newRecord;
+        // 텍스트 메시지는 payload로 즉시 추가, 미디어는 full reload
+        if (record.isNotEmpty && record['type'] == 'text') {
+          final msg = Message.fromJson({...record, 'media': <dynamic>[]});
+          final byId = {for (final m in _messages) m.id: m};
+          byId[msg.id] = msg;
+          _messages = byId.values.toList()..sort((a, b) => a.id.compareTo(b.id));
+          _cacheMessages([msg]);
+          notifyListeners();
+        } else {
+          await _loadMessages();
+          notifyListeners();
+        }
       },
     );
     channel.onPostgresChanges(
