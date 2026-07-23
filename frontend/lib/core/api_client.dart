@@ -97,23 +97,44 @@ class ApiClient {
           for (final m in messages)
             m['id'] as int: m['permission_type'] as String?,
         };
-        final mediaByMessage = <int, List<Map<String, dynamic>>>{};
+        // 1단계: 행을 messageId별로 분류 (서명 전)
+        final rawByMessage = <int, List<Map<String, dynamic>>>{};
         for (final item in mediaRows) {
           final row = Map<String, dynamic>.from(item as Map);
           final messageId = row['message_id'] as int;
-          var url = row['url'] as String;
-          // keep 타입은 썸네일 표시용 signed URL 즉시 발급
-          if (!url.startsWith('http') && permByMessage[messageId] == 'keep') {
-            try {
-              url = await supabaseClient.storage.from('media').createSignedUrl(url, 3600);
-            } catch (_) {}
-          }
-          (mediaByMessage[messageId] ??= []).add({
-            'media_id': row['id'],
-            'url': url,
-            'mime_type': row['mime_type'],
-          });
+          (rawByMessage[messageId] ??= []).add(row);
         }
+
+        // 2단계: keep 타입만 signed URL 병렬 발급
+        final mediaByMessage = <int, List<Map<String, dynamic>>>{};
+        await Future.wait(rawByMessage.entries.map((entry) async {
+          final messageId = entry.key;
+          final rows = entry.value;
+          final isKeep = permByMessage[messageId] == 'keep';
+          final List<String> urls;
+          if (isKeep) {
+            urls = await Future.wait(rows.map((row) async {
+              final path = row['url'] as String;
+              if (path.startsWith('http')) return path;
+              try {
+                return await supabaseClient.storage.from('media').createSignedUrl(path, 3600);
+              } catch (e) {
+                Log.w('API', 'keep 미디어 signed URL 생성 실패 (path=$path): $e');
+                return path;
+              }
+            }));
+          } else {
+            urls = rows.map((row) => row['url'] as String).toList();
+          }
+          mediaByMessage[messageId] = [
+            for (var i = 0; i < rows.length; i++)
+              {
+                'media_id': rows[i]['id'],
+                'url': urls[i],
+                'mime_type': rows[i]['mime_type'],
+              },
+          ];
+        }));
         for (final message in messages) {
           message['media'] = mediaByMessage[message['id']] ?? [];
         }

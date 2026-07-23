@@ -42,6 +42,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   }
 
   void _onScroll() {
+    if (!_scrollCtrl.hasClients) return;
     if (_scrollCtrl.position.pixels <= 80) {
       context.read<ChatProvider>().loadOlderMessages();
     }

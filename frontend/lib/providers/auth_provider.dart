@@ -147,7 +147,12 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> _updateDeviceId([String? _]) async {
     if (_deviceId == null) return;
-    await supabaseClient.rpc('update_device_id', params: {'p_device_id': _deviceId});
+    try {
+      await supabaseClient.rpc('update_device_id', params: {'p_device_id': _deviceId});
+    } catch (e) {
+      // device_id 갱신 실패는 로그인을 차단하지 않음 (재시도는 다음 로그인 시)
+      Log.w('AUTH', 'device_id 업데이트 실패 (비차단): $e');
+    }
   }
 
   static String _authAlias(String loginId) => '$loginId@auth.dulman.invalid';

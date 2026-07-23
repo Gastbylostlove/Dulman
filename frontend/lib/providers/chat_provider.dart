@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import '../core/api_client.dart';
 import '../core/constants.dart';
@@ -344,13 +346,15 @@ class ChatProvider extends ChangeNotifier {
     final chatId = _chatId;
     if (chatId == null) return;
     for (final msg in messages) {
-      _localDb.cacheMessage(
-        id: msg.id,
-        chatId: chatId,
-        senderId: msg.senderId,
-        type: msg.type,
-        textContent: msg.textContent,
-        createdAt: msg.createdAt.toIso8601String(),
+      unawaited(
+        _localDb.cacheMessage(
+          id: msg.id,
+          chatId: chatId,
+          senderId: msg.senderId,
+          type: msg.type,
+          textContent: msg.textContent,
+          createdAt: msg.createdAt.toIso8601String(),
+        ).catchError((Object e) => Log.w('CHAT', '캐시 저장 실패: $e')),
       );
     }
   }
