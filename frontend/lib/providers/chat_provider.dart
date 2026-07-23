@@ -158,15 +158,28 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
-  // 미디어 열람 (once/replay_once view_count 차감)
+  // 미디어 열람 (view_count 차감 후 signed URL로 message 내 media URL 갱신)
   Future<String?> accessMedia(int messageId) async {
     if (_accessToken == null) return '인증 오류';
     Log.i('CHAT', 'accessMedia: messageId=$messageId');
     try {
-      await ApiClient.accessMedia(_accessToken!, messageId);
-      await _loadMessages();
-      notifyListeners();
-      Log.i('CHAT', 'accessMedia 완료: messageId=$messageId');
+      final result = await ApiClient.accessMedia(_accessToken!, messageId);
+      final signedUrls = (result['signed_urls'] as List<dynamic>).cast<String>();
+
+      // 해당 메시지의 media URL을 signed URL로 교체
+      final idx = _messages.indexWhere((m) => m.id == messageId);
+      if (idx >= 0) {
+        final msg = _messages[idx];
+        final updatedMedia = List<MediaItem>.generate(msg.media.length, (i) {
+          return msg.media[i].copyWith(
+            url: i < signedUrls.length ? signedUrls[i] : msg.media[i].url,
+          );
+        });
+        _messages = List<Message>.from(_messages)
+          ..[idx] = msg.copyWith(media: updatedMedia);
+        notifyListeners();
+      }
+      Log.i('CHAT', 'accessMedia 완료: messageId=$messageId  urls=${signedUrls.length}개');
       return null;
     } on ApiException catch (e) {
       Log.e('CHAT', 'accessMedia 실패: [${e.code}] ${e.message}');

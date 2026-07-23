@@ -821,7 +821,9 @@ class _MediaThumb extends StatelessWidget {
 }
 
 String _resolveMediaUrl(MediaItem media) {
-  return media.url.startsWith('http') ? media.url : '$kBaseUrl${media.url}';
+  // Supabase Storage: signed URL이 발급된 상태이므로 그대로 사용
+  // (once/replay_once는 accessMedia 호출 후 signed URL로 교체됨)
+  return media.url;
 }
 
 class _MediaViewerScreen extends StatefulWidget {

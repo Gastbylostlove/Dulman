@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'logger.dart';
 import 'supabase_client.dart';
 
@@ -91,13 +92,25 @@ class ApiClient {
             .from('media')
             .select()
             .inFilter('message_id', ids);
+        // permissionType lookup for signed URL decision
+        final permByMessage = <int, String?>{
+          for (final m in messages)
+            m['id'] as int: m['permission_type'] as String?,
+        };
         final mediaByMessage = <int, List<Map<String, dynamic>>>{};
         for (final item in mediaRows) {
           final row = Map<String, dynamic>.from(item as Map);
           final messageId = row['message_id'] as int;
+          var url = row['url'] as String;
+          // keep 타입은 썸네일 표시용 signed URL 즉시 발급
+          if (!url.startsWith('http') && permByMessage[messageId] == 'keep') {
+            try {
+              url = await supabaseClient.storage.from('media').createSignedUrl(url, 3600);
+            } catch (_) {}
+          }
           (mediaByMessage[messageId] ??= []).add({
             'media_id': row['id'],
-            'url': row['url'],
+            'url': url,
             'mime_type': row['mime_type'],
           });
         }
@@ -185,22 +198,41 @@ class ApiClient {
     }
   }
 
-  // Media remains unavailable until the signed-upload RPC and private bucket
-  // are added. Keeping these methods preserves the existing UI boundary.
+  // 업로드 경로 생성 (Storage에 직접 인증 업로드 방식)
   static Future<Map<String, dynamic>> createMediaUploadIntent(
     String accessToken,
     int chatId,
     List<Map<String, dynamic>> files,
   ) async {
-    throw ApiException('MEDIA_NOT_AVAILABLE', '미디어 업로드는 다음 단계에서 연결됩니다.');
+    final items = <Map<String, dynamic>>[];
+    for (var i = 0; i < files.length; i++) {
+      final mime = files[i]['mime_type'] as String;
+      final ext = mime.split('/').last;
+      final storagePath = '$chatId/${DateTime.now().millisecondsSinceEpoch}_$i.$ext';
+      items.add({
+        'upload_url': storagePath,
+        'media_url': storagePath,
+        'mime_type': mime,
+      });
+    }
+    return {'upload_items': items};
   }
 
+  // Supabase Storage 인증 업로드 (RLS INSERT 정책으로 참여자 검증)
   static Future<void> uploadFile(
-    String uploadPath,
+    String storagePath,
     String filePath,
     String mimeType,
   ) async {
-    throw ApiException('MEDIA_NOT_AVAILABLE', '미디어 업로드는 다음 단계에서 연결됩니다.');
+    try {
+      final bytes = await File(filePath).readAsBytes();
+      await supabaseClient.storage
+          .from('media')
+          .uploadBinary(storagePath, bytes,
+              fileOptions: FileOptions(contentType: mimeType));
+    } catch (e) {
+      throw ApiException('MEDIA_UPLOAD_FAILED', '파일 업로드 실패: $e');
+    }
   }
 
   static Future<Map<String, dynamic>> sendMediaMessage(
@@ -210,14 +242,49 @@ class ApiClient {
     List<Map<String, String>> mediaItems, {
     String? textContent,
   }) async {
-    throw ApiException('MEDIA_NOT_AVAILABLE', '미디어 업로드는 다음 단계에서 연결됩니다.');
+    try {
+      final p = <Map<String, String>>[];
+      for (final item in mediaItems) {
+        p.add({'storage_path': item['url']!, 'mime_type': item['mime_type']!});
+      }
+      return await _rpcFirst('send_media_message', {
+        'p_chat_id': chatId,
+        'p_permission_type': permissionType,
+        'p_media_items': p,
+        'p_text_content': textContent,
+      });
+    } on PostgrestException catch (e) {
+      throw _mapException(e);
+    }
   }
 
+  // view_count 차감 후 스토리지 경로 반환 → 호출자가 signed URL 발급
   static Future<Map<String, dynamic>> accessMedia(
     String accessToken,
     int messageId,
   ) async {
-    throw ApiException('MEDIA_NOT_AVAILABLE', '미디어 열람은 다음 단계에서 연결됩니다.');
+    try {
+      final result = await supabaseClient.rpc(
+        'access_media',
+        params: {'p_message_id': messageId},
+      );
+      final data = Map<String, dynamic>.from(result as Map);
+      final mediaPaths = (data['media'] as List<dynamic>? ?? [])
+          .cast<Map<String, dynamic>>();
+      final signedUrls = <String>[];
+      for (final item in mediaPaths) {
+        final path = item['storage_path'] as String;
+        final signed = await supabaseClient.storage
+            .from('media')
+            .createSignedUrl(path, 3600);
+        signedUrls.add(signed);
+      }
+      return {'signed_urls': signedUrls};
+    } on PostgrestException catch (e) {
+      throw _mapException(e);
+    } catch (e) {
+      throw ApiException('MEDIA_ACCESS_FAILED', '미디어 열람 실패: $e');
+    }
   }
 
   static Future<String> _currentLoginId() async {
