@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Move the pre-release 1:1 chat app from Node.js/local PostgreSQL polling to Supabase-backed direct Flutter access with cursor pagination, local search groundwork, Realtime delivery, and read receipts. FCM remains configuration-only in this version.
+**Goal:** Move the pre-release 1:1 chat app from Node.js/local PostgreSQL polling to Supabase-backed direct Flutter access with cursor pagination, local search, Realtime delivery, read receipts, and Android push notifications.
 
-**Architecture:** Supabase PostgreSQL remains the server source of truth. Flutter accesses Supabase directly through Supabase Auth, PostgREST, and Realtime; the old Node.js API is no longer used by the implemented text-chat path. Drift/SQLite provides the local message cache and FTS5 index. Media upload/access remains disabled until its private-storage authorization path is implemented. FCM has configuration slots only.
+**Architecture:** Supabase PostgreSQL remains the server source of truth. Flutter accesses Supabase directly through Supabase Auth, PostgREST, and Realtime; Node.js is removed after the client migration. Drift/SQLite is a client cache and FTS5 search index, while FCM is used only to notify Android users when the app is backgrounded or terminated.
 
 **Tech Stack:** Flutter/Dart, `supabase_flutter`, Drift/SQLite FTS5, Supabase CLI, Supabase PostgreSQL/RLS/Realtime/Edge Functions, Firebase Cloud Messaging for Android.
 
@@ -21,9 +21,9 @@
 - Add monotonic 1:1 read state through `chat_read_state`; do not create one row per message.
 - Add Drift/SQLite cache and local FTS5 search.
 - Use normalization plus 2–3 character N-grams for the MVP; do not add a server-side Korean morphological analyzer yet.
-- Reserve FCM for Android background/terminated notifications. Do not include message body text in notifications.
-- Use Supabase Edge Functions or an equivalent trusted boundary for future privileged media and FCM work.
-- Remove the Node.js runtime only after media parity and the remaining smoke tests pass.
+- Use FCM for Android background/terminated notifications. Do not include message body text in notifications.
+- Use Supabase Edge Functions only for privileged work such as FCM sending and S3 signed-upload issuance.
+- Remove the Node.js runtime after Flutter no longer calls the old HTTP API.
 
 ### Explicitly excluded
 
@@ -35,27 +35,19 @@
 
 ### Decision gate before code migration
 
-The user-facing credential remains the arbitrary `login_id`. Supabase Auth uses a deterministic internal email alias such as `<login_id>@auth.dulman.invalid` only as its identity key; the alias is never shown to users and email confirmation/reset flows are not part of this MVP. The linked project's email confirmation is disabled through CLI config because the alias does not have a real mailbox. The `user_account.login_id` value remains the application identity used by chat rows and RLS mapping. Login IDs are restricted to `^[A-Za-z0-9._-]{3,64}$` before alias generation.
-
-### Implementation status at this checkpoint
-
-- Done: linked Supabase project `kfcfbqmriqcqyriisnof` and applied schema, RLS, rate-limit RPCs, security grants, and Realtime publication migrations.
-- Done: Supabase Auth `login_id` mapping, direct text-chat RPCs, keyset message reads, read-state RPC, Realtime subscription, and sender-side `읽음` display.
-- Done: Drift/SQLite database with an FTS5 cache table and FCM configuration-only constants.
-- Pending: private media upload/access RPCs and Storage policy, full offline sync/search UI, negative RLS integration tests, and Node.js retirement.
-- Environment limitation: `supabase db lint` requires a running Docker daemon; remote security advisors were run instead.
+The current app accepts an arbitrary `login_id`, while Supabase Auth needs a supported identity such as email. Because there are no deployed users, the recommended path is to change the authentication form and Supabase Auth identity to email/password, while retaining `login_id` only if a separate display/login alias is still required. If arbitrary non-email login IDs must remain, a server-side authentication boundary cannot be removed safely and this plan must be revised before implementation.
 
 ## 2. Current implementation evidence
 
 | Area | Current behavior | Evidence |
 | --- | --- | --- |
 | Pagination | Repository loads all messages; service filters and slices in JS | `backend/src/db/postgres.js:157`, `backend/src/service.js:218` |
-| Client polling | 3-second waiting and message timers | Previous implementation; replaced in `frontend/lib/providers/chat_provider.dart` |
-| Local cache | Messages existed only in `_messages` memory list | Previous implementation; Drift cache is now in `frontend/lib/data/local_database.dart` |
+| Client polling | 3-second waiting and message timers | `frontend/lib/providers/chat_provider.dart:243` |
+| Local cache | Messages exist only in `_messages` memory list | `frontend/lib/providers/chat_provider.dart:15` |
 | Search | No search implementation or SQLite dependency | `frontend/pubspec.yaml:9` |
 | Schema | Current database is 1:1 `chat` plus `message` | `backend/db/schema.sql:9` |
 | Media | Node.js currently proxies S3 upload/download | `backend/src/server.js:92` |
-| Read receipt | No read-state table or API | Previous implementation; now `chat_read_state` and `mark_chat_read` |
+| Read receipt | No read-state table or API | `backend/db/schema.sql`, `frontend/lib/core/api_client.dart` |
 
 ## 3. Target data contracts
 
@@ -106,26 +98,28 @@ WHERE chat_id = :chat_id AND user_id = :user_id;
 
 If the row does not exist, insert it. The client sends the highest message actually displayed, not merely downloaded. A sender's message is shown as read when it is at or below the partner's `last_read_message_id`.
 
-The implemented client path is a Supabase RPC rather than a Node HTTP endpoint:
+The client contract is:
 
 ```text
-rpc mark_chat_read(p_chat_id := 123, p_message_id := 456)
+POST /chat-read-receipts
+{ "chat_id": 123, "message_id": 456 }
 ```
 
 The receipt update is delivered to the other participant through Realtime.
 
-### 3.3 Push notification configuration
+### 3.3 Push notification
 
-FCM is deferred. This version only provides configuration slots and does not add the Firebase SDK, token registration, Edge Function, webhook, or notification permission flow.
+The Android app obtains an FCM registration token and stores the current token for the signed-in user. Token refresh replaces the stored value.
 
 ```text
-FCM project ID
-FCM sender ID
-Android app ID
-FCM server credential reference
+message INSERT
+→ Supabase database webhook
+→ send-push Edge Function
+→ FCM
+→ Android system notification
 ```
 
-The configuration file must contain empty or development-safe values only. No service credential is committed. Future FCM work will store the registration token server-side and send only generic notifications without message content.
+The notification contains only a generic title/body and `chat_id`; message content is not included. Opening the notification triggers normal Supabase sync.
 
 ## 4. Security baseline
 
@@ -137,7 +131,7 @@ Security is a release gate. The Flutter client is untrusted; client-side checks 
 - Flutter may contain only the Supabase publishable key. `service_role`, FCM service-account credentials, and AWS signing credentials belong in Supabase secrets or the provider's secret store.
 - Never log access tokens, refresh tokens, FCM tokens, message content, search tokens, media URLs, or raw authorization headers.
 - Rotate leaked or suspected credentials immediately and verify that old credentials no longer work.
-- `current_device_id` is recorded for device management, but this checkpoint does not claim complete single-device session invalidation. A server-verified device/session claim is required before restoring that policy.
+- Keep the single-device policy: a new login invalidates the previous session, and the old device must receive an authentication failure on its next protected operation.
 
 ### 4.2 RLS and authorization
 
@@ -147,8 +141,7 @@ Security is a release gate. The Flutter client is untrusted; client-side checks 
 - `message`: a user can select only messages in a chat they participate in; inserts must force `sender_id` to the authenticated user and must reject client-supplied sender changes.
 - `media`: a user can read metadata only for messages in a participating active chat. `once`/`replay_once` view-count changes and URL issuance must be atomic server-side operations, never a client-side `UPDATE`.
 - `chat_read_state`: a user can upsert only their own row and can read read-state rows only for a chat they participate in.
-- `realtime.messages`: a private channel subscription is allowed only when the authenticated user participates in the chat ID encoded in the channel topic.
-- `push_token` is not present in v0.2.0 because FCM registration is deferred. Add it only with the token-registration task and matching RLS policy.
+- `push_token`: a user can write only their own current token; other users cannot query it.
 - Add a negative RLS test for every table using an authenticated non-participant and an unauthenticated client.
 
 ### 4.3 Rate limiting and abuse controls
@@ -195,7 +188,7 @@ CREATE TABLE security_rate_limit (
 
 ### 4.5 Media and content security
 
-- Keep the future media bucket private. Generate object keys server-side; never accept arbitrary bucket keys or public URLs from the client.
+- Keep the S3 bucket private. Generate object keys server-side; never accept arbitrary bucket keys or public URLs from the client.
 - Use short-lived signed upload/access URLs and verify chat participation before issuing them.
 - Enforce the documented media limits: 20 MB per photo, 200 MB per video, and 500 MB total per send request, unless the product policy is changed first.
 - Allow only the supported MIME types and derive the object extension from the validated MIME type.
@@ -226,18 +219,21 @@ CREATE TABLE security_rate_limit (
 
 - `supabase/config.toml` — local Supabase CLI configuration.
 - `supabase/migrations/*_v020_schema.sql` — target schema, indexes, read state, token fields, RLS, and rate-limit prerequisites. Create it with `supabase migration new v020_schema`.
+- `supabase/functions/send-push/index.ts` — FCM HTTP v1 sender invoked by a database webhook.
+- `supabase/functions/create-s3-upload-url/index.ts` — privileged S3 upload URL issuance if AWS S3 remains the media store.
 - `frontend/lib/core/supabase_client.dart` — one Supabase client entry point.
-- `frontend/lib/core/supabase_config.dart` — project URL and publishable-key configuration.
-- `frontend/lib/core/push_config.dart` — future FCM project/configuration slots; no active push integration.
 - `frontend/lib/data/local_database.dart` — Drift database and FTS5 table definition.
+- `frontend/lib/data/chat_repository.dart` — server/cache synchronization and read-state operations.
+- `frontend/test/chat_repository_test.dart` — cursor merge and read-state behavior tests.
 
 ### Modify
 
-- `frontend/pubspec.yaml` — add `supabase_flutter`, `drift`, and `sqlite3_flutter_libs`; do not add `firebase_messaging` in v0.2.0.
-- `frontend/lib/main.dart` — initialize Supabase and Drift. FCM is not initialized.
+- `frontend/pubspec.yaml` — add `supabase_flutter`, `drift`, `sqlite3_flutter_libs`, and `firebase_messaging` only when each task reaches implementation.
+- `frontend/lib/main.dart` — initialize Supabase, Drift, and Firebase Messaging.
 - `frontend/lib/providers/auth_provider.dart` — replace custom HTTP auth with Supabase Auth.
 - `frontend/lib/providers/chat_provider.dart` — replace timers with repository sync/Realtime subscriptions and read cursor updates.
-- `frontend/lib/core/api_client.dart` — use Supabase RPC/PostgREST for the implemented text-chat path; media methods remain an explicit disabled boundary.
+- `frontend/lib/core/api_client.dart` — remove old Node API calls after parity verification.
+- `frontend/lib/models/models.dart` — add read state and local sync fields.
 - `frontend/lib/screens/chat_room_screen.dart` — search UI, read-state reporting, and removal of the false E2EE label.
 - `frontend/android/app/src/main/AndroidManifest.xml` — Android notification permission/channel configuration.
 - `docs/prd.md` — update the source architecture, Realtime, read receipt, push, and retention policy after implementation decisions are finalized.
@@ -258,53 +254,63 @@ CREATE TABLE security_rate_limit (
 
 **Files:** `supabase/config.toml`, `supabase/migrations/*`
 
-- [x] Authenticate CLI, create/link the `dulman` project, and apply the migrations.
-- [x] Add the target schema without changing the 1:1 chat model.
-- [x] Add `chat_read_state`, `user_account.auth_user_id`, indexes, private `security_rate_limit`, trusted functions, and security grants.
-- [ ] Verify locally with `supabase db reset` and `supabase db lint` after Docker is available.
+- [ ] Confirm CLI authentication with `supabase login` and select the project returned by `supabase projects list`.
+- [ ] Initialize or link the repository with `supabase init` and `supabase link --project-ref "$SUPABASE_PROJECT_REF"`.
+- [ ] Add the target schema migration without changing the 1:1 chat model.
+- [ ] Add `chat_read_state`, `user_account.auth_user_id`, and `user_account.push_token` only if the Auth/token decision gate is accepted.
+- [ ] Add indexes for `(chat_id, id)` and `(chat_id, user_id)`.
+- [ ] Add the private `security_rate_limit` table and atomic trusted functions for the listed write operations.
+- [ ] Verify locally with `supabase db reset` and inspect the resulting schema.
 
 ### Task 2: Supabase Auth and RLS
 
 **Files:** `supabase/migrations/*`, `frontend/lib/core/supabase_client.dart`, `frontend/lib/providers/auth_provider.dart`, auth screens
 
-- [x] Configure email/password Auth for the Android MVP with email confirmation disabled for the internal alias.
-- [x] Create the `user_account` mapping row after Auth signup.
-- [x] Replace custom JWT storage and refresh calls with Supabase Auth session handling.
-- [x] Add RLS policies and deny direct client writes to message/read-state tables; text/read writes use approved RPCs.
+- [ ] Configure email/password Auth for the Android MVP.
+- [ ] Create the `user_account` mapping row after Auth signup.
+- [ ] Replace custom JWT storage and refresh calls with Supabase Auth session handling.
+- [ ] Add RLS policies so a user can read/write only their own account, their 1:1 chats, messages in participating chats, media in participating chats, and their own read state.
+- [ ] Deny direct client writes to message/media/read-state tables and grant only the approved RPC or Edge Function path.
 - [ ] Add a negative RLS test for a non-participant attempting to read another chat.
-- [x] Run Flutter analysis/tests and remote security advisors.
+- [ ] Run the Flutter auth test and the Supabase SQL/RLS checks before moving on.
 
 ### Task 3: Cursor pagination and local cache
 
-**Files:** `frontend/lib/data/local_database.dart`, `frontend/lib/core/api_client.dart`, `frontend/lib/providers/chat_provider.dart`
+**Files:** `frontend/lib/data/local_database.dart`, `frontend/lib/data/chat_repository.dart`, `frontend/lib/providers/chat_provider.dart`, `frontend/test/chat_repository_test.dart`
 
-- [x] Define a Drift/SQLite message cache and FTS5 search table.
-- [x] Implement ascending cursor reads and merge pages by message ID.
-- [x] Query media only for returned message IDs.
-- [ ] Persist sync cursor/read-state metadata and add repository-level pagination tests.
+- [ ] Define Drift tables for messages, media metadata, sync cursor, read state, and FTS5 search rows.
+- [ ] Implement initial sync in ascending `id` pages of 50.
+- [ ] Implement delta sync using the stored highest message ID.
+- [ ] Merge pages by message ID instead of replacing the entire in-memory list.
+- [ ] Query media only for returned messages.
+- [ ] Test that 51 messages require two pages and that the second request starts after the first page's highest ID.
 
 ### Task 4: Realtime messages and read receipts
 
-**Files:** `frontend/lib/core/api_client.dart`, `frontend/lib/providers/chat_provider.dart`, `frontend/lib/screens/chat_room_screen.dart`, `supabase/migrations/*`
+**Files:** `frontend/lib/data/chat_repository.dart`, `frontend/lib/providers/chat_provider.dart`, `frontend/lib/screens/chat_room_screen.dart`, `supabase/migrations/*`
 
-- [x] Subscribe to Realtime changes for active-chat message, chat-status, and read-state events.
+- [ ] Subscribe to private Realtime changes for the active chat's message inserts.
 - [ ] Insert each received message into Drift before notifying the UI.
-- [x] Subscribe to `chat_read_state` changes for the active chat.
-- [x] Submit the monotonic read cursor after the rendered message list advances.
-- [x] Display `읽음` for sent messages at or below the partner's read cursor.
+- [ ] Subscribe to `chat_read_state` changes for the active chat.
+- [ ] After the last visible message is rendered, submit the monotonic read cursor through the trusted read-state RPC.
+- [ ] Display `읽음` for sent messages at or below the partner's read cursor.
 - [ ] Run a two-client manual check: B reads through message 7, and A sees messages 1–7 as read.
 
-### Task 5: FCM configuration only
+### Task 5: FCM Android notifications
 
-**Files:** `frontend/lib/core/push_config.dart`, `frontend/test/push_config_test.dart`
+**Files:** `frontend/pubspec.yaml`, `frontend/lib/main.dart`, `frontend/lib/core/notifications.dart`, `frontend/android/*`, `supabase/functions/send-push/index.ts`
 
-- [x] Add empty configuration fields for Firebase project ID, sender ID, Android app ID, and credential reference.
-- [x] Keep the configuration non-secret; the app starts without Firebase credentials.
-- [ ] Do not add Firebase dependencies, Android Firebase files, push-token storage, webhooks, or notification handlers in v0.2.0.
+- [ ] Register the Android app in Firebase and configure `google-services.json` without committing secrets.
+- [ ] Request Android notification permission where required and obtain the FCM token.
+- [ ] Persist the current token in `user_account.push_token`.
+- [ ] Deploy the Edge Function with the FCM service credentials stored as Supabase secrets.
+- [ ] Create a database webhook for new `message` rows.
+- [ ] Suppress visible notification UI while the active chat is foregrounded; use a generic notification when backgrounded or terminated.
+- [ ] Verify tapping the notification opens the chat and runs delta sync.
 
 ### Task 6: Search
 
-**Files:** `frontend/lib/data/local_database.dart`, `frontend/lib/screens/chat_room_screen.dart`
+**Files:** `frontend/lib/data/local_database.dart`, `frontend/lib/data/chat_repository.dart`, `frontend/lib/screens/chat_room_screen.dart`, `frontend/test/chat_repository_test.dart`
 
 - [ ] Normalize text with lowercase conversion, whitespace compression, NFC normalization, and the agreed repeated-character rule.
 - [ ] Generate 2–3 character N-grams locally and store them as one whitespace-separated FTS5 field.
@@ -314,11 +320,11 @@ CREATE TABLE security_rate_limit (
 
 ### Task 7: S3 path and Node.js retirement
 
-**Files:** `frontend/lib/core/api_client.dart`, `backend/*`, `supabase/migrations/*`
+**Files:** `supabase/functions/create-s3-upload-url/index.ts`, `frontend/lib/data/chat_repository.dart`, `frontend/lib/core/api_client.dart`, `backend/*`
 
-- [ ] Implement private Supabase Storage (or S3) upload/access RPCs before re-enabling media.
+- [ ] Replace Node-mediated S3 upload issuance with a privileged Edge Function or explicitly choose Supabase Storage.
 - [ ] Keep media access authorization server-side and preserve `once`/`replay_once`/`keep` behavior.
-- [x] Confirm the implemented auth/text/read path has no calls to `/api/*`; media retains disabled compatibility methods.
+- [ ] Confirm Flutter has no remaining calls to `/api/*`.
 - [ ] Stop the Node.js runtime locally and run the Supabase-backed Flutter smoke flow.
 - [ ] Remove old backend code only after the smoke flow and equivalent tests pass.
 
@@ -331,7 +337,7 @@ CREATE TABLE security_rate_limit (
 - [ ] Remove the `chat_members` migration proposal from the implementation contract.
 - [ ] Resolve the retention choice before implementing account deletion: minimum, 1-year balanced, or 3-year evidence-preservation policy.
 - [ ] Publish the privacy policy and consent copy before release; include chat/media storage, retention, external processors, push tokens, and user rights.
-- [x] Replace the `E2EE 보호 중` UI copy with wording consistent with the actual security model.
+- [ ] Replace the `E2EE 보호 중` UI copy with wording consistent with the actual security model.
 
 ## 7. Validation gates
 
@@ -349,16 +355,15 @@ Manual acceptance criteria:
 - A user cannot query a chat they do not participate in.
 - 51 messages are retrieved in two cursor pages without loading all rows.
 - Realtime delivers a new online message without a timer.
-- The app builds and starts with empty FCM configuration.
+- A backgrounded Android app receives a generic notification without message content.
+- Opening the notification syncs the missing message.
 - Read state moves forward only and appears on the sender's message.
-- FTS5 search works for messages already inserted into the local cache; search UI and N-gram normalization remain pending.
-- No implemented auth/text/read path calls the retired Node.js API; media compatibility methods fail closed until storage is implemented.
-
-Current verification: `flutter test` passed; `flutter analyze` reports only pre-existing/deprecation-level info; remote Realtime publication contains `chat`, `message`, and `chat_read_state`. `supabase db lint` remains pending until Docker is running.
+- Search works offline for messages already cached locally.
+- No Flutter code calls the retired Node.js API.
 
 ## 8. Items intentionally not hardcoded yet
 
 - Retention duration and account-deletion purge timing require a product/legal decision.
-- FCM/APNs transport and notification delivery are deferred until the push integration task is explicitly started.
+- iOS/APNs configuration is deferred until iOS enters the release scope.
 - Korean morphological analysis is deferred until N-gram search quality is measured.
 - Supabase plan limits are not treated as architecture requirements; monitor actual usage after deployment.
