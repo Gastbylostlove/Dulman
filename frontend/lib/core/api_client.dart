@@ -279,30 +279,17 @@ class ApiClient {
     }
   }
 
-  // view_count 차감 후 스토리지 경로 반환 → 호출자가 signed URL 발급
+  // Edge Function에서 view_count 차감과 signed URL 발급을 처리
   static Future<Map<String, dynamic>> accessMedia(
     String accessToken,
     int messageId,
   ) async {
     try {
-      final result = await supabaseClient.rpc(
-        'access_media',
-        params: {'p_message_id': messageId},
+      final result = await supabaseClient.functions.invoke(
+        'access-media',
+        body: {'message_id': messageId},
       );
-      final data = Map<String, dynamic>.from(result as Map);
-      final mediaPaths = (data['media'] as List<dynamic>? ?? [])
-          .cast<Map<String, dynamic>>();
-      final signedUrls = <String>[];
-      for (final item in mediaPaths) {
-        final path = item['storage_path'] as String;
-        final signed = await supabaseClient.storage
-            .from('media')
-            .createSignedUrl(path, 3600);
-        signedUrls.add(signed);
-      }
-      return {'signed_urls': signedUrls};
-    } on PostgrestException catch (e) {
-      throw _mapException(e);
+      return Map<String, dynamic>.from(result.data as Map);
     } catch (e) {
       throw ApiException('MEDIA_ACCESS_FAILED', '미디어 열람 실패: $e');
     }

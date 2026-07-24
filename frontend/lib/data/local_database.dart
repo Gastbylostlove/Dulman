@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 class LocalDatabase implements QueryExecutorUser {
@@ -14,7 +15,6 @@ class LocalDatabase implements QueryExecutorUser {
 
   @override
   Future<void> beforeOpen(QueryExecutor executor, OpeningDetails details) async {
-    // _BeforeOpeningExecutor는 ensureOpen 호출 시 open 상태로 표시됨
     await executor.ensureOpen(this);
     if (details.wasCreated || details.hadUpgrade) {
       await _createSchema(executor);
@@ -26,6 +26,17 @@ class LocalDatabase implements QueryExecutorUser {
     final executor = LazyDatabase(() async {
       return NativeDatabase(File('${directory.path}/dulman.sqlite3'));
     });
+    return _open(executor);
+  }
+
+  /// 테스트용 인메모리 데이터베이스를 연다.
+  @visibleForTesting
+  static Future<LocalDatabase> openInMemory() {
+    return _open(NativeDatabase.memory());
+  }
+
+  /// 주어진 executor를 열어 데이터베이스를 반환한다.
+  static Future<LocalDatabase> _open(QueryExecutor executor) async {
     final database = LocalDatabase._(executor);
     await executor.ensureOpen(database);
     return database;
@@ -87,10 +98,11 @@ class LocalDatabase implements QueryExecutorUser {
   }) {
     return _executor.runSelect(
       '''
-      SELECT id, chat_id, sender_id, type, text_content, created_at
-      FROM chat_messages_fts
-      WHERE chat_id = ? AND chat_messages_fts MATCH ?
-      ORDER BY id DESC
+      SELECT m.id, m.chat_id, m.sender_id, m.type, m.text_content, m.created_at
+      FROM chat_messages_fts AS fts
+      JOIN chat_messages AS m ON m.id = fts.id
+      WHERE fts.chat_id = ? AND chat_messages_fts MATCH ?
+      ORDER BY m.id DESC
       LIMIT ?
       ''',
       [chatId, query, limit],
