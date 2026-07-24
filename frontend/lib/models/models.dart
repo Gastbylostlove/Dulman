@@ -10,6 +10,12 @@ class MediaItem {
         url: j['url'] as String,
         mimeType: j['mime_type'] as String,
       );
+
+  MediaItem copyWith({String? url}) => MediaItem(
+        mediaId: mediaId,
+        url: url ?? this.url,
+        mimeType: mimeType,
+      );
 }
 
 class Message {
@@ -44,6 +50,17 @@ class Message {
             .map((m) => MediaItem.fromJson(m as Map<String, dynamic>))
             .toList(),
         createdAt: DateTime.parse(j['created_at'] as String),
+      );
+
+  Message copyWith({List<MediaItem>? media}) => Message(
+        id: id,
+        senderId: senderId,
+        type: type,
+        textContent: textContent,
+        permissionType: permissionType,
+        viewCount: viewCount,
+        media: media ?? this.media,
+        createdAt: createdAt,
       );
 
   bool get isText => type == 'text';

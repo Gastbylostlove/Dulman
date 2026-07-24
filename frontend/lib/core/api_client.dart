@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'logger.dart';
 import 'supabase_client.dart';
 
@@ -54,24 +55,29 @@ class ApiClient {
     String accessToken,
     int chatId, {
     int? afterMessageId,
+    int? beforeMessageId,
     int limit = 50,
+    bool descending = false,
   }) async {
     try {
-      final chat = await supabaseClient
+      // 참여자 여부만 확인 (last_reset_at 필터는 RLS에서 처리)
+      final chatExists = await supabaseClient
           .from('chat')
-          .select('last_reset_at')
+          .select('id')
           .eq('id', chatId)
           .maybeSingle();
-      if (chat == null) throw ApiException('CHAT_NOT_FOUND', '채팅방을 찾을 수 없습니다.');
+      if (chatExists == null) throw ApiException('CHAT_NOT_FOUND', '채팅방을 찾을 수 없습니다.');
 
       var query = supabaseClient
           .from('message')
           .select()
           .eq('chat_id', chatId);
       if (afterMessageId != null) query = query.gt('id', afterMessageId);
-      final lastResetAt = chat['last_reset_at'] as String?;
-      if (lastResetAt != null) query = query.gt('created_at', lastResetAt);
-      final rows = await query.order('id', ascending: true).limit(limit.clamp(1, 100));
+      if (beforeMessageId != null) query = query.lt('id', beforeMessageId);
+      // last_reset_at 필터는 RLS(message_select_participant)가 서버에서 처리
+      final rows = await query
+          .order('id', ascending: !descending)
+          .limit(limit.clamp(1, 100));
 
       final messages = <Map<String, dynamic>>[];
       final ids = <int>[];
@@ -86,16 +92,49 @@ class ApiClient {
             .from('media')
             .select()
             .inFilter('message_id', ids);
-        final mediaByMessage = <int, List<Map<String, dynamic>>>{};
+        // permissionType lookup for signed URL decision
+        final permByMessage = <int, String?>{
+          for (final m in messages)
+            m['id'] as int: m['permission_type'] as String?,
+        };
+        // 1단계: 행을 messageId별로 분류 (서명 전)
+        final rawByMessage = <int, List<Map<String, dynamic>>>{};
         for (final item in mediaRows) {
           final row = Map<String, dynamic>.from(item as Map);
           final messageId = row['message_id'] as int;
-          (mediaByMessage[messageId] ??= []).add({
-            'media_id': row['id'],
-            'url': row['url'],
-            'mime_type': row['mime_type'],
-          });
+          (rawByMessage[messageId] ??= []).add(row);
         }
+
+        // 2단계: keep 타입만 signed URL 병렬 발급
+        final mediaByMessage = <int, List<Map<String, dynamic>>>{};
+        await Future.wait(rawByMessage.entries.map((entry) async {
+          final messageId = entry.key;
+          final rows = entry.value;
+          final isKeep = permByMessage[messageId] == 'keep';
+          final List<String> urls;
+          if (isKeep) {
+            urls = await Future.wait(rows.map((row) async {
+              final path = row['url'] as String;
+              if (path.startsWith('http')) return path;
+              try {
+                return await supabaseClient.storage.from('media').createSignedUrl(path, 3600);
+              } catch (e) {
+                Log.w('API', 'keep 미디어 signed URL 생성 실패 (path=$path): $e');
+                return path;
+              }
+            }));
+          } else {
+            urls = rows.map((row) => row['url'] as String).toList();
+          }
+          mediaByMessage[messageId] = [
+            for (var i = 0; i < rows.length; i++)
+              {
+                'media_id': rows[i]['id'],
+                'url': urls[i],
+                'mime_type': rows[i]['mime_type'],
+              },
+          ];
+        }));
         for (final message in messages) {
           message['media'] = mediaByMessage[message['id']] ?? [];
         }
@@ -180,22 +219,41 @@ class ApiClient {
     }
   }
 
-  // Media remains unavailable until the signed-upload RPC and private bucket
-  // are added. Keeping these methods preserves the existing UI boundary.
+  // 업로드 경로 생성 (Storage에 직접 인증 업로드 방식)
   static Future<Map<String, dynamic>> createMediaUploadIntent(
     String accessToken,
     int chatId,
     List<Map<String, dynamic>> files,
   ) async {
-    throw ApiException('MEDIA_NOT_AVAILABLE', '미디어 업로드는 다음 단계에서 연결됩니다.');
+    final items = <Map<String, dynamic>>[];
+    for (var i = 0; i < files.length; i++) {
+      final mime = files[i]['mime_type'] as String;
+      final ext = mime.split('/').last;
+      final storagePath = '$chatId/${DateTime.now().millisecondsSinceEpoch}_$i.$ext';
+      items.add({
+        'upload_url': storagePath,
+        'media_url': storagePath,
+        'mime_type': mime,
+      });
+    }
+    return {'upload_items': items};
   }
 
+  // Supabase Storage 인증 업로드 (RLS INSERT 정책으로 참여자 검증)
   static Future<void> uploadFile(
-    String uploadPath,
+    String storagePath,
     String filePath,
     String mimeType,
   ) async {
-    throw ApiException('MEDIA_NOT_AVAILABLE', '미디어 업로드는 다음 단계에서 연결됩니다.');
+    try {
+      final bytes = await File(filePath).readAsBytes();
+      await supabaseClient.storage
+          .from('media')
+          .uploadBinary(storagePath, bytes,
+              fileOptions: FileOptions(contentType: mimeType));
+    } catch (e) {
+      throw ApiException('MEDIA_UPLOAD_FAILED', '파일 업로드 실패: $e');
+    }
   }
 
   static Future<Map<String, dynamic>> sendMediaMessage(
@@ -205,14 +263,36 @@ class ApiClient {
     List<Map<String, String>> mediaItems, {
     String? textContent,
   }) async {
-    throw ApiException('MEDIA_NOT_AVAILABLE', '미디어 업로드는 다음 단계에서 연결됩니다.');
+    try {
+      final p = <Map<String, String>>[];
+      for (final item in mediaItems) {
+        p.add({'storage_path': item['url']!, 'mime_type': item['mime_type']!});
+      }
+      return await _rpcFirst('send_media_message', {
+        'p_chat_id': chatId,
+        'p_permission_type': permissionType,
+        'p_media_items': p,
+        'p_text_content': textContent,
+      });
+    } on PostgrestException catch (e) {
+      throw _mapException(e);
+    }
   }
 
+  // Edge Function에서 view_count 차감과 signed URL 발급을 처리
   static Future<Map<String, dynamic>> accessMedia(
     String accessToken,
     int messageId,
   ) async {
-    throw ApiException('MEDIA_NOT_AVAILABLE', '미디어 열람은 다음 단계에서 연결됩니다.');
+    try {
+      final result = await supabaseClient.functions.invoke(
+        'access-media',
+        body: {'message_id': messageId},
+      );
+      return Map<String, dynamic>.from(result.data as Map);
+    } catch (e) {
+      throw ApiException('MEDIA_ACCESS_FAILED', '미디어 열람 실패: $e');
+    }
   }
 
   static Future<String> _currentLoginId() async {

@@ -59,6 +59,7 @@ class AuthProvider extends ChangeNotifier {
       final user = response.user;
       if (user == null) throw AuthException('AUTH_INVALID_CREDENTIALS');
       await _ensureAccount(user.id, loginId);
+      await _updateDeviceId();
       _loginId = loginId;
       _status = AuthStatus.authenticated;
       notifyListeners();
@@ -93,6 +94,7 @@ class AuthProvider extends ChangeNotifier {
         throw const AuthException('AUTH_CONFIRMATION_REQUIRED');
       }
       await _ensureAccount(user.id, loginId);
+      await _updateDeviceId();
       _loginId = loginId;
       _status = AuthStatus.authenticated;
       notifyListeners();
@@ -136,18 +138,21 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> _ensureAccount(String authUserId, String loginId) async {
+    // INSERT only — UPDATE is handled via update_device_id RPC (no direct UPDATE grant)
     await supabaseClient.from('user_account').upsert({
       'login_id': loginId,
       'auth_user_id': authUserId,
-      'current_device_id': _deviceId,
-    }, onConflict: 'login_id');
+    }, onConflict: 'login_id', ignoreDuplicates: true);
   }
 
-  Future<void> _updateDeviceId(String authUserId) async {
-    await supabaseClient
-        .from('user_account')
-        .update({'current_device_id': _deviceId})
-        .eq('auth_user_id', authUserId);
+  Future<void> _updateDeviceId([String? _]) async {
+    if (_deviceId == null) return;
+    try {
+      await supabaseClient.rpc('update_device_id', params: {'p_device_id': _deviceId});
+    } catch (e) {
+      // device_id 갱신 실패는 로그인을 차단하지 않음 (재시도는 다음 로그인 시)
+      Log.w('AUTH', 'device_id 업데이트 실패 (비차단): $e');
+    }
   }
 
   static String _authAlias(String loginId) => '$loginId@auth.dulman.invalid';

@@ -1,23 +1,49 @@
 import 'dart:io';
 
+import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
-class LocalDatabase {
+class LocalDatabase implements QueryExecutorUser {
   LocalDatabase._(this._executor);
 
-  final NativeDatabase _executor;
+  final QueryExecutor _executor;
+
+  @override
+  int get schemaVersion => 1;
+
+  @override
+  Future<void> beforeOpen(QueryExecutor executor, OpeningDetails details) async {
+    await executor.ensureOpen(this);
+    if (details.wasCreated || details.hadUpgrade) {
+      await _createSchema(executor);
+    }
+  }
 
   static Future<LocalDatabase> open() async {
     final directory = await getApplicationDocumentsDirectory();
-    final executor = NativeDatabase(File('${directory.path}/dulman.sqlite3'));
+    final executor = LazyDatabase(() async {
+      return NativeDatabase(File('${directory.path}/dulman.sqlite3'));
+    });
+    return _open(executor);
+  }
+
+  /// 테스트용 인메모리 데이터베이스를 연다.
+  @visibleForTesting
+  static Future<LocalDatabase> openInMemory() {
+    return _open(NativeDatabase.memory());
+  }
+
+  /// 주어진 executor를 열어 데이터베이스를 반환한다.
+  static Future<LocalDatabase> _open(QueryExecutor executor) async {
     final database = LocalDatabase._(executor);
-    await database._initialize();
+    await executor.ensureOpen(database);
     return database;
   }
 
-  Future<void> _initialize() async {
-    await _executor.runCustom('''
+  Future<void> _createSchema(QueryExecutor executor) async {
+    await executor.runCustom('''
       CREATE TABLE IF NOT EXISTS chat_messages (
         id INTEGER PRIMARY KEY,
         chat_id INTEGER NOT NULL,
@@ -27,11 +53,11 @@ class LocalDatabase {
         created_at TEXT NOT NULL
       )
     ''');
-    await _executor.runCustom('''
+    await executor.runCustom('''
       CREATE VIRTUAL TABLE IF NOT EXISTS chat_messages_fts
       USING fts5(text_content, id UNINDEXED, chat_id UNINDEXED)
     ''');
-    await _executor.runCustom('''
+    await executor.runCustom('''
       CREATE INDEX IF NOT EXISTS idx_chat_messages_chat_id_id
       ON chat_messages(chat_id, id)
     ''');
@@ -72,10 +98,11 @@ class LocalDatabase {
   }) {
     return _executor.runSelect(
       '''
-      SELECT id, chat_id, sender_id, type, text_content, created_at
-      FROM chat_messages_fts
-      WHERE chat_id = ? AND chat_messages_fts MATCH ?
-      ORDER BY id DESC
+      SELECT m.id, m.chat_id, m.sender_id, m.type, m.text_content, m.created_at
+      FROM chat_messages_fts AS fts
+      JOIN chat_messages AS m ON m.id = fts.id
+      WHERE fts.chat_id = ? AND chat_messages_fts MATCH ?
+      ORDER BY m.id DESC
       LIMIT ?
       ''',
       [chatId, query, limit],

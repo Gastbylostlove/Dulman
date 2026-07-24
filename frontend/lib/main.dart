@@ -27,7 +27,7 @@ class DulmanApp extends StatelessWidget {
         Provider<LocalDatabase>.value(value: localDatabase),
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProxyProvider<AuthProvider, ChatProvider>(
-          create: (_) => ChatProvider(),
+          create: (ctx) => ChatProvider(ctx.read<LocalDatabase>()),
           update: (_, auth, chat) {
             chat!.updateAuth(auth);
             return chat;

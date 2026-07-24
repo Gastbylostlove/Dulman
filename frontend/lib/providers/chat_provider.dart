@@ -1,14 +1,21 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import '../core/api_client.dart';
 import '../core/constants.dart';
 import '../core/logger.dart';
 import '../core/supabase_client.dart';
+import '../data/local_database.dart';
 import '../models/models.dart';
 import 'auth_provider.dart';
 
 enum ChatState { idle, waiting, active, ended }
 
 class ChatProvider extends ChangeNotifier {
+  ChatProvider(this._localDb);
+
+  final LocalDatabase _localDb;
+
   int? _chatId;
   String? _inviteCode;
   ChatState _state = ChatState.idle;
@@ -21,6 +28,8 @@ class ChatProvider extends ChangeNotifier {
 
   // 상대방이 강제 로그아웃 처리됐는지 (AUTH_DEVICE_REPLACED)
   bool _forcedLogout = false;
+  bool _hasOlderMessages = false;
+  bool _isLoadingOlder = false;
 
   int? get chatId => _chatId;
   String? get inviteCode => _inviteCode;
@@ -29,6 +38,8 @@ class ChatProvider extends ChangeNotifier {
   String? get sendError => _sendError;
   bool get isSending => _isSending;
   bool get forcedLogout => _forcedLogout;
+  bool get hasOlderMessages => _hasOlderMessages;
+  bool get isLoadingOlder => _isLoadingOlder;
 
   bool isMessageRead(int messageId) => messageId <= _partnerLastReadMessageId;
 
@@ -149,15 +160,28 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
-  // 미디어 열람 (once/replay_once view_count 차감)
+  // 미디어 열람 (view_count 차감 후 signed URL로 message 내 media URL 갱신)
   Future<String?> accessMedia(int messageId) async {
     if (_accessToken == null) return '인증 오류';
     Log.i('CHAT', 'accessMedia: messageId=$messageId');
     try {
-      await ApiClient.accessMedia(_accessToken!, messageId);
-      await _loadMessages();
-      notifyListeners();
-      Log.i('CHAT', 'accessMedia 완료: messageId=$messageId');
+      final result = await ApiClient.accessMedia(_accessToken!, messageId);
+      final signedUrls = (result['signed_urls'] as List<dynamic>).cast<String>();
+
+      // 해당 메시지의 media URL을 signed URL로 교체
+      final idx = _messages.indexWhere((m) => m.id == messageId);
+      if (idx >= 0) {
+        final msg = _messages[idx];
+        final updatedMedia = List<MediaItem>.generate(msg.media.length, (i) {
+          return msg.media[i].copyWith(
+            url: i < signedUrls.length ? signedUrls[i] : msg.media[i].url,
+          );
+        });
+        _messages = List<Message>.from(_messages)
+          ..[idx] = msg.copyWith(media: updatedMedia);
+        notifyListeners();
+      }
+      Log.i('CHAT', 'accessMedia 완료: messageId=$messageId  urls=${signedUrls.length}개');
       return null;
     } on ApiException catch (e) {
       Log.e('CHAT', 'accessMedia 실패: [${e.code}] ${e.message}');
@@ -242,18 +266,57 @@ class ChatProvider extends ChangeNotifier {
 
   // ── 내부 ───────────────────────────────────────────────────────────────────
 
-  Future<void> _loadMessages({bool replace = false}) async {
+  // 이전 메시지 더 불러오기 (위로 스크롤 시 호출)
+  Future<void> loadOlderMessages() async {
     if (_accessToken == null || _chatId == null) return;
+    if (!_hasOlderMessages || _isLoadingOlder || _messages.isEmpty) return;
+    _isLoadingOlder = true;
+    notifyListeners();
     try {
       final result = await ApiClient.listMessages(
         _accessToken!,
         _chatId!,
-        afterMessageId: replace || _messages.isEmpty ? null : _messages.last.id,
+        beforeMessageId: _messages.first.id,
+        descending: true,
       );
       final list = (result['messages'] as List<dynamic>)
           .map((m) => Message.fromJson(m as Map<String, dynamic>))
+          .toList()
+          .reversed
           .toList();
-      if (replace) {
+      _hasOlderMessages = list.length >= 50;
+      if (list.isNotEmpty) {
+        final byId = {for (final m in list) m.id: m};
+        for (final m in _messages) { byId[m.id] = m; }
+        _messages = byId.values.toList()..sort((a, b) => a.id.compareTo(b.id));
+        Log.i('CHAT', 'loadOlderMessages: ${list.length}개 선행 추가');
+      }
+    } on ApiException catch (e) {
+      Log.e('CHAT', 'loadOlderMessages 실패: [${e.code}] ${e.message}');
+    } finally {
+      _isLoadingOlder = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _loadMessages({bool replace = false}) async {
+    if (_accessToken == null || _chatId == null) return;
+    try {
+      // 초기 로드는 최신 메시지부터 (DESC), 이후 증분 로드는 ASC
+      final isInitial = replace || _messages.isEmpty;
+      final result = await ApiClient.listMessages(
+        _accessToken!,
+        _chatId!,
+        afterMessageId: isInitial ? null : _messages.last.id,
+        descending: isInitial,
+      );
+      var list = (result['messages'] as List<dynamic>)
+          .map((m) => Message.fromJson(m as Map<String, dynamic>))
+          .toList();
+      if (isInitial) {
+        // DESC로 받았으므로 역전해서 시간 오름차순으로 표시
+        list = list.reversed.toList();
+        _hasOlderMessages = list.length >= 50;
         _messages = list;
       } else if (list.isNotEmpty) {
         final byId = {for (final message in _messages) message.id: message};
@@ -262,7 +325,10 @@ class ChatProvider extends ChangeNotifier {
         }
         _messages = byId.values.toList()..sort((a, b) => a.id.compareTo(b.id));
       }
-      if (list.isNotEmpty) Log.i('CHAT', '_loadMessages: ${list.length}개 추가/갱신');
+      if (list.isNotEmpty) {
+        Log.i('CHAT', '_loadMessages: ${list.length}개 추가/갱신');
+        _cacheMessages(list);
+      }
     } on ApiException catch (e) {
       Log.e('CHAT', '_loadMessages 실패: [${e.code}] ${e.message}');
       if (e.code == kErrDeviceReplaced) {
@@ -273,6 +339,23 @@ class ChatProvider extends ChangeNotifier {
         _stopRealtime();
         notifyListeners();
       }
+    }
+  }
+
+  void _cacheMessages(List<Message> messages) {
+    final chatId = _chatId;
+    if (chatId == null) return;
+    for (final msg in messages) {
+      unawaited(
+        _localDb.cacheMessage(
+          id: msg.id,
+          chatId: chatId,
+          senderId: msg.senderId,
+          type: msg.type,
+          textContent: msg.textContent,
+          createdAt: msg.createdAt.toIso8601String(),
+        ).catchError((Object e) => Log.w('CHAT', '캐시 저장 실패: $e')),
+      );
     }
   }
 
@@ -294,9 +377,20 @@ class ChatProvider extends ChangeNotifier {
         column: 'chat_id',
         value: chatId,
       ),
-      callback: (_) async {
-        await _loadMessages();
-        notifyListeners();
+      callback: (payload) async {
+        final record = payload.newRecord;
+        // 텍스트 메시지는 payload로 즉시 추가, 미디어는 full reload
+        if (record.isNotEmpty && record['type'] == 'text') {
+          final msg = Message.fromJson({...record, 'media': <dynamic>[]});
+          final byId = {for (final m in _messages) m.id: m};
+          byId[msg.id] = msg;
+          _messages = byId.values.toList()..sort((a, b) => a.id.compareTo(b.id));
+          _cacheMessages([msg]);
+          notifyListeners();
+        } else {
+          await _loadMessages();
+          notifyListeners();
+        }
       },
     );
     channel.onPostgresChanges(
