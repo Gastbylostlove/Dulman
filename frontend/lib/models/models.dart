@@ -52,16 +52,30 @@ class Message {
         createdAt: DateTime.parse(j['created_at'] as String),
       );
 
-  Message copyWith({List<MediaItem>? media}) => Message(
+  Message copyWith({int? viewCount, List<MediaItem>? media}) => Message(
         id: id,
         senderId: senderId,
         type: type,
         textContent: textContent,
         permissionType: permissionType,
-        viewCount: viewCount,
+        viewCount: viewCount ?? this.viewCount,
         media: media ?? this.media,
         createdAt: createdAt,
       );
+
+  /// 제한 미디어의 signed URL과 로컬 열람 횟수를 함께 반영한다.
+  Message withAccessedMediaUrls(List<String> signedUrls) {
+    if (signedUrls.length != media.length) {
+      throw ArgumentError('signed URL count does not match media count');
+    }
+    final consumesView = permissionType == 'once' || permissionType == 'replay_once';
+    return copyWith(
+      viewCount: consumesView ? viewCount + 1 : viewCount,
+      media: [
+        for (var i = 0; i < media.length; i++) media[i].copyWith(url: signedUrls[i]),
+      ],
+    );
+  }
 
   bool get isText => type == 'text';
   bool get isMedia => type == 'media';

@@ -219,29 +219,27 @@ class ApiClient {
     }
   }
 
-  // 업로드 경로 생성 (Storage에 직접 인증 업로드 방식)
+  // 서버 검증 후 1분짜리 signed upload token 발급
   static Future<Map<String, dynamic>> createMediaUploadIntent(
     String accessToken,
     int chatId,
     List<Map<String, dynamic>> files,
   ) async {
-    final items = <Map<String, dynamic>>[];
-    for (var i = 0; i < files.length; i++) {
-      final mime = files[i]['mime_type'] as String;
-      final ext = mime.split('/').last;
-      final storagePath = '$chatId/${DateTime.now().millisecondsSinceEpoch}_$i.$ext';
-      items.add({
-        'upload_url': storagePath,
-        'media_url': storagePath,
-        'mime_type': mime,
-      });
+    try {
+      final result = await supabaseClient.functions.invoke(
+        'create-media-upload',
+        body: {'chat_id': chatId, 'files': files},
+      );
+      return Map<String, dynamic>.from(result.data as Map);
+    } catch (e) {
+      throw ApiException('MEDIA_UPLOAD_FAILED', '업로드 권한 발급 실패: $e');
     }
-    return {'upload_items': items};
   }
 
-  // Supabase Storage 인증 업로드 (RLS INSERT 정책으로 참여자 검증)
+  // 서버가 발급한 일회용 token으로 Supabase Storage 업로드
   static Future<void> uploadFile(
     String storagePath,
+    String uploadToken,
     String filePath,
     String mimeType,
   ) async {
@@ -249,8 +247,12 @@ class ApiClient {
       final bytes = await File(filePath).readAsBytes();
       await supabaseClient.storage
           .from('media')
-          .uploadBinary(storagePath, bytes,
-              fileOptions: FileOptions(contentType: mimeType));
+          .uploadBinaryToSignedUrl(
+            storagePath,
+            uploadToken,
+            bytes,
+            FileOptions(contentType: mimeType),
+          );
     } catch (e) {
       throw ApiException('MEDIA_UPLOAD_FAILED', '파일 업로드 실패: $e');
     }

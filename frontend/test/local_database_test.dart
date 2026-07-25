@@ -22,4 +22,22 @@ void main() {
     expect(results.single['type'], 'text');
     expect(results.single['created_at'], '2026-07-25T00:00:00Z');
   });
+
+  test('clearChatMessages removes reset messages from cache and FTS', () async {
+    final database = await LocalDatabase.openInMemory();
+    addTearDown(database.close);
+
+    await database.cacheMessage(
+      id: 2,
+      chatId: 7,
+      senderId: 'alice',
+      type: 'text',
+      textContent: 'reset secret',
+      createdAt: '2026-07-25T00:00:00Z',
+    );
+
+    await database.clearChatMessages(7);
+
+    expect(await database.search(chatId: 7, query: 'secret'), isEmpty);
+  });
 }

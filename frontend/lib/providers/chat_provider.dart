@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 import '../core/api_client.dart';
 import '../core/constants.dart';
@@ -30,6 +28,8 @@ class ChatProvider extends ChangeNotifier {
   bool _forcedLogout = false;
   bool _hasOlderMessages = false;
   bool _isLoadingOlder = false;
+  DateTime? _lastResetAt;
+  int _cacheGeneration = 0;
 
   int? get chatId => _chatId;
   String? get inviteCode => _inviteCode;
@@ -87,6 +87,7 @@ class ChatProvider extends ChangeNotifier {
       _chatId = id;
       _inviteCode = null;
       final status = result['status'] as String? ?? 'active';
+      _lastResetAt = _parseTimestamp(result['last_reset_at']);
       _state = status == 'active' ? ChatState.active : ChatState.waiting;
       Log.i('CHAT', 'loadActiveChat: chatId=$_chatId  status=$status → state=$_state');
       if (_state == ChatState.active) {
@@ -161,8 +162,10 @@ class ChatProvider extends ChangeNotifier {
   }
 
   // 미디어 열람 (view_count 차감 후 signed URL로 message 내 media URL 갱신)
-  Future<String?> accessMedia(int messageId) async {
-    if (_accessToken == null) return '인증 오류';
+  Future<({String? error, List<String> urls})> accessMedia(int messageId) async {
+    if (_accessToken == null) {
+      return (error: '인증 오류', urls: const <String>[]);
+    }
     Log.i('CHAT', 'accessMedia: messageId=$messageId');
     try {
       final result = await ApiClient.accessMedia(_accessToken!, messageId);
@@ -172,21 +175,21 @@ class ChatProvider extends ChangeNotifier {
       final idx = _messages.indexWhere((m) => m.id == messageId);
       if (idx >= 0) {
         final msg = _messages[idx];
-        final updatedMedia = List<MediaItem>.generate(msg.media.length, (i) {
-          return msg.media[i].copyWith(
-            url: i < signedUrls.length ? signedUrls[i] : msg.media[i].url,
-          );
-        });
+        if (signedUrls.length != msg.media.length) {
+          throw ApiException('MEDIA_ACCESS_FAILED', '미디어 응답이 올바르지 않습니다.');
+        }
         _messages = List<Message>.from(_messages)
-          ..[idx] = msg.copyWith(media: updatedMedia);
+          ..[idx] = msg.withAccessedMediaUrls(signedUrls);
         notifyListeners();
       }
       Log.i('CHAT', 'accessMedia 완료: messageId=$messageId  urls=${signedUrls.length}개');
-      return null;
+      return (error: null, urls: signedUrls);
     } on ApiException catch (e) {
       Log.e('CHAT', 'accessMedia 실패: [${e.code}] ${e.message}');
-      if (e.code == 'MEDIA_VIEW_LIMIT_EXCEEDED') return '열람 횟수를 초과했습니다.';
-      return e.message;
+      final message = e.code == 'MEDIA_VIEW_LIMIT_EXCEEDED'
+          ? '열람 횟수를 초과했습니다.'
+          : e.message;
+      return (error: message, urls: const <String>[]);
     }
   }
 
@@ -195,8 +198,9 @@ class ChatProvider extends ChangeNotifier {
     if (_accessToken == null || _chatId == null) return '오류';
     Log.i('CHAT', 'resetChat: chatId=$_chatId');
     try {
-      await ApiClient.resetChat(_accessToken!, _chatId!);
-      _messages = [];
+      final result = await ApiClient.resetChat(_accessToken!, _chatId!);
+      _lastResetAt = _parseTimestamp(result['last_reset_at']);
+      await _clearMessagesAfterReset(_chatId!);
       await _loadMessages(replace: true);
       notifyListeners();
       Log.i('CHAT', 'resetChat 완료');
@@ -327,7 +331,7 @@ class ChatProvider extends ChangeNotifier {
       }
       if (list.isNotEmpty) {
         Log.i('CHAT', '_loadMessages: ${list.length}개 추가/갱신');
-        _cacheMessages(list);
+        await _cacheMessages(list);
       }
     } on ApiException catch (e) {
       Log.e('CHAT', '_loadMessages 실패: [${e.code}] ${e.message}');
@@ -342,21 +346,33 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
-  void _cacheMessages(List<Message> messages) {
+  Future<void> _cacheMessages(List<Message> messages) async {
     final chatId = _chatId;
     if (chatId == null) return;
+    final generation = _cacheGeneration;
     for (final msg in messages) {
-      unawaited(
-        _localDb.cacheMessage(
+      if (generation != _cacheGeneration) return;
+      try {
+        await _localDb.cacheMessage(
           id: msg.id,
           chatId: chatId,
           senderId: msg.senderId,
           type: msg.type,
           textContent: msg.textContent,
           createdAt: msg.createdAt.toIso8601String(),
-        ).catchError((Object e) => Log.w('CHAT', '캐시 저장 실패: $e')),
-      );
+        );
+      } catch (e) {
+        Log.w('CHAT', '캐시 저장 실패: $e');
+      }
     }
+  }
+
+  /// 진행 중인 캐시 쓰기를 무효화하고 reset된 채팅 캐시를 비운다.
+  Future<void> _clearMessagesAfterReset(int chatId) async {
+    _cacheGeneration++;
+    _messages = [];
+    _hasOlderMessages = false;
+    await _localDb.clearChatMessages(chatId);
   }
 
   void _subscribeToChat() {
@@ -385,7 +401,7 @@ class ChatProvider extends ChangeNotifier {
           final byId = {for (final m in _messages) m.id: m};
           byId[msg.id] = msg;
           _messages = byId.values.toList()..sort((a, b) => a.id.compareTo(b.id));
-          _cacheMessages([msg]);
+          await _cacheMessages([msg]);
           notifyListeners();
         } else {
           await _loadMessages();
@@ -404,9 +420,16 @@ class ChatProvider extends ChangeNotifier {
       ),
       callback: (payload) async {
         final status = payload.newRecord['status'] as String?;
+        final resetAt = _parseTimestamp(payload.newRecord['last_reset_at']);
+        final resetChanged = resetAt != null && resetAt != _lastResetAt;
         if (status == 'active' && _state != ChatState.active) {
           _state = ChatState.active;
           _messages = [];
+          _lastResetAt = resetAt;
+          await _loadMessages(replace: true);
+        } else if (status == 'active' && resetChanged) {
+          _lastResetAt = resetAt;
+          await _clearMessagesAfterReset(chatId);
           await _loadMessages(replace: true);
         } else if (status == 'ended') {
           _state = ChatState.ended;
@@ -447,7 +470,13 @@ class ChatProvider extends ChangeNotifier {
     _inviteCode = null;
     _state = ChatState.idle;
     _messages = [];
+    _lastResetAt = null;
     notifyListeners();
+  }
+
+  /// Supabase timestamptz 값을 비교 가능한 DateTime으로 변환한다.
+  static DateTime? _parseTimestamp(Object? value) {
+    return value is String ? DateTime.tryParse(value) : null;
   }
 
   @override

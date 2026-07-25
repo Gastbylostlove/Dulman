@@ -7,7 +7,6 @@ import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../models/models.dart';
 import '../core/api_client.dart';
-import '../core/constants.dart';
 import '../core/logger.dart';
 import 'auth_screen.dart';
 import 'onboarding_screen.dart';
@@ -155,9 +154,19 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     // 1. 업로드 인텐트 발급
     final fileInfos = files.map((f) {
       final ext = f.name.split('.').last.toLowerCase();
-      final mime = ext == 'mp4' ? 'video/mp4' : 'image/jpeg';
+      final detectedMime = f.mimeType;
+      final mime = detectedMime == 'image/jpg'
+          ? 'image/jpeg'
+          : detectedMime ??
+                switch (ext) {
+                  'jpg' || 'jpeg' => 'image/jpeg',
+                  'png' => 'image/png',
+                  'gif' => 'image/gif',
+                  'webp' => 'image/webp',
+                  'mp4' => 'video/mp4',
+                  _ => 'application/octet-stream',
+                };
       final bytes = File(f.path).lengthSync();
-      Log.i('MEDIA', '  파일: ${f.name}  mime=$mime  size=${bytes}bytes');
       return {'client_file_id': f.name, 'mime_type': mime, 'byte_size': bytes};
     }).toList();
 
@@ -171,28 +180,27 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
 
       final uploadItems = intentResult['upload_items'] as List<dynamic>;
       Log.i('MEDIA', '[1/3] 인텐트 수신 완료: ${uploadItems.length}개');
-      for (final item in uploadItems) {
-        Log.i(
-          'MEDIA',
-          '  upload_url=${item['upload_url']}  media_url=${item['media_url']}',
-        );
-      }
 
       // 2. 파일을 상대 경로(upload_url)로 PUT 업로드
       Log.i('MEDIA', '[2/3] 파일 업로드 시작');
       for (int i = 0; i < files.length; i++) {
         final item = uploadItems[i] as Map<String, dynamic>;
         final uploadPath = item['upload_url'] as String;
+        final uploadToken = item['upload_token'] as String;
         final mime = fileInfos[i]['mime_type'] as String;
-        Log.i('MEDIA', '  [${i + 1}/${files.length}] $uploadPath');
-        await ApiClient.uploadFile(uploadPath, files[i].path, mime);
+        Log.i('MEDIA', '  [${i + 1}/${files.length}] 업로드');
+        await ApiClient.uploadFile(
+          uploadPath,
+          uploadToken,
+          files[i].path,
+          mime,
+        );
       }
       Log.i('MEDIA', '[2/3] 업로드 완료');
 
-      // 3. 메시지 전송 — media_url은 /media/... 형태, 표시 시 kBaseUrl 조합
+      // 3. 메시지 전송
       final mediaItems = uploadItems.map((item) {
         final url = item['media_url'] as String;
-        Log.i('MEDIA', '  DB에 저장될 media_url=$url  (표시 URL: $kBaseUrl$url)');
         return {'url': url, 'mime_type': item['mime_type'] as String};
       }).toList();
 
@@ -698,14 +706,13 @@ class _RestrictedMediaButton extends StatelessWidget {
   }
 
   Future<void> _open(BuildContext context) async {
-    final mediaUrls = message.media.map(_resolveMediaUrl).toList();
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
 
-    final err = await chat.accessMedia(message.id);
+    final access = await chat.accessMedia(message.id);
     if (!navigator.mounted || !messenger.mounted) return;
-    if (err != null) {
-      messenger.showSnackBar(SnackBar(content: Text(err)));
+    if (access.error != null) {
+      messenger.showSnackBar(SnackBar(content: Text(access.error!)));
       return;
     }
 
@@ -713,7 +720,7 @@ class _RestrictedMediaButton extends StatelessWidget {
     await navigator.push(
       MaterialPageRoute(
         builder: (_) => _MediaViewerScreen(
-          mediaUrls: mediaUrls,
+          mediaUrls: access.urls,
           initialIndex: 0,
           permissionLabel: message.permissionLabel,
         ),
@@ -794,21 +801,22 @@ class _MediaThumb extends StatelessWidget {
   }
 
   Future<void> _openMedia(BuildContext context) async {
-    final mediaUrls = message.media.map(_resolveMediaUrl).toList();
-    final startIndex = mediaIndex.clamp(0, mediaUrls.length - 1).toInt();
+    var mediaUrls = message.media.map(_resolveMediaUrl).toList();
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
 
     if (message.permissionType != 'keep') {
-      final err = await chat.accessMedia(message.id);
+      final access = await chat.accessMedia(message.id);
       if (!navigator.mounted || !messenger.mounted) return;
-      if (err != null) {
-        messenger.showSnackBar(SnackBar(content: Text(err)));
+      if (access.error != null) {
+        messenger.showSnackBar(SnackBar(content: Text(access.error!)));
         return;
       }
+      mediaUrls = access.urls;
     }
 
     if (!navigator.mounted) return;
+    final startIndex = mediaIndex.clamp(0, mediaUrls.length - 1).toInt();
     await navigator.push(
       MaterialPageRoute(
         builder: (_) => _MediaViewerScreen(

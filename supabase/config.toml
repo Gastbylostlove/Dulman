@@ -115,7 +115,7 @@ port = 54324
 [storage]
 enabled = true
 # The maximum file size allowed (e.g. "5MB", "500KB").
-file_size_limit = "50MiB"
+file_size_limit = "200MiB"
 
 # Uncomment to configure local storage buckets
 # [storage.buckets.images]
@@ -395,6 +395,11 @@ backend = "postgres"
 enabled = true
 verify_jwt = true
 entrypoint = "./functions/access-media/index.ts"
+
+[functions.create-media-upload]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/create-media-upload/index.ts"
 
 # Experimental features may be deprecated any time
 [experimental]

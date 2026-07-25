@@ -109,5 +109,17 @@ class LocalDatabase implements QueryExecutorUser {
     );
   }
 
+  /// 채팅 reset 이전의 원문 캐시와 FTS 인덱스를 함께 제거한다.
+  Future<void> clearChatMessages(int chatId) async {
+    await _executor.runCustom(
+      'DELETE FROM chat_messages_fts WHERE chat_id = ?',
+      [chatId],
+    );
+    await _executor.runDelete(
+      'DELETE FROM chat_messages WHERE chat_id = ?',
+      [chatId],
+    );
+  }
+
   Future<void> close() => _executor.close();
 }

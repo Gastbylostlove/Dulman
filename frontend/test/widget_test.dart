@@ -129,6 +129,28 @@ void main() {
     expect(original.media.first.url, 'storage/1/b.jpg'); // 원본 불변
   });
 
+  test('media access applies signed urls and consumes one view locally', () {
+    final original = Message(
+      id: 11,
+      senderId: 'alice',
+      type: 'media',
+      permissionType: 'once',
+      viewCount: 0,
+      media: const [
+        MediaItem(mediaId: 6, url: '7/original.jpg', mimeType: 'image/jpeg'),
+      ],
+      createdAt: DateTime.parse('2026-07-25T00:00:00Z'),
+    );
+
+    final accessed = original.withAccessedMediaUrls([
+      'https://signed.example.com/original.jpg?token=abc',
+    ]);
+
+    expect(accessed.media.single.url, contains('token=abc'));
+    expect(accessed.viewCount, 1);
+    expect(accessed.canView, isFalse);
+  });
+
   test('listMessages DESC cursor logic: beforeMessageId와 afterMessageId는 배타적', () {
     // beforeMessageId → 오래된 메시지 더 불러오기
     // afterMessageId  → 새 메시지 증분 로드
