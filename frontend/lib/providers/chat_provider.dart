@@ -274,15 +274,18 @@ class ChatProvider extends ChangeNotifier {
   Future<void> loadOlderMessages() async {
     if (_accessToken == null || _chatId == null) return;
     if (!_hasOlderMessages || _isLoadingOlder || _messages.isEmpty) return;
+    final generation = _cacheGeneration;
+    final chatId = _chatId!;
     _isLoadingOlder = true;
     notifyListeners();
     try {
       final result = await ApiClient.listMessages(
         _accessToken!,
-        _chatId!,
+        chatId,
         beforeMessageId: _messages.first.id,
         descending: true,
       );
+      if (generation != _cacheGeneration || chatId != _chatId) return;
       final list = (result['messages'] as List<dynamic>)
           .map((m) => Message.fromJson(m as Map<String, dynamic>))
           .toList()
@@ -305,15 +308,18 @@ class ChatProvider extends ChangeNotifier {
 
   Future<void> _loadMessages({bool replace = false}) async {
     if (_accessToken == null || _chatId == null) return;
+    final generation = _cacheGeneration;
+    final chatId = _chatId!;
     try {
       // 초기 로드는 최신 메시지부터 (DESC), 이후 증분 로드는 ASC
       final isInitial = replace || _messages.isEmpty;
       final result = await ApiClient.listMessages(
         _accessToken!,
-        _chatId!,
+        chatId,
         afterMessageId: isInitial ? null : _messages.last.id,
         descending: isInitial,
       );
+      if (generation != _cacheGeneration || chatId != _chatId) return;
       var list = (result['messages'] as List<dynamic>)
           .map((m) => Message.fromJson(m as Map<String, dynamic>))
           .toList();
