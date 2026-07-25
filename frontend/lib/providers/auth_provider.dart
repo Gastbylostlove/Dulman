@@ -19,13 +19,13 @@ class AuthProvider extends ChangeNotifier {
   String? get error => _error;
   bool get isAuthenticated => _status == AuthStatus.authenticated;
 
-  Future<int?> init() async {
+  Future<void> init() async {
     _deviceId = await SecureStorage.getOrCreateDeviceId();
     final session = supabaseClient.auth.currentSession;
     if (session == null) {
       _status = AuthStatus.unauthenticated;
       notifyListeners();
-      return null;
+      return;
     }
 
     try {
@@ -34,21 +34,19 @@ class AuthProvider extends ChangeNotifier {
         await supabaseClient.auth.signOut();
         _status = AuthStatus.unauthenticated;
         notifyListeners();
-        return null;
+        return;
       }
       await _updateDeviceId(session.user.id);
       _status = AuthStatus.authenticated;
       notifyListeners();
-      return null;
     } catch (e, st) {
       Log.e('AUTH', 'Supabase 세션 복구 실패', e, st);
       _status = AuthStatus.unauthenticated;
       notifyListeners();
-      return null;
     }
   }
 
-  Future<int?> login(String loginId, String password) async {
+  Future<void> login(String loginId, String password) async {
     _error = null;
     try {
       _validateLoginId(loginId);
@@ -63,24 +61,20 @@ class AuthProvider extends ChangeNotifier {
       _loginId = loginId;
       _status = AuthStatus.authenticated;
       notifyListeners();
-      return null;
     } on AuthException catch (e) {
       _error = _translateAuthError(e.message);
       notifyListeners();
-      return null;
     } on PostgrestException catch (e) {
       _error = _translateAuthError(e.message);
       notifyListeners();
-      return null;
     } catch (e, st) {
       Log.e('AUTH', 'login 실패', e, st);
       _error = '로그인에 실패했습니다.';
       notifyListeners();
-      return null;
     }
   }
 
-  Future<int?> register(String loginId, String password) async {
+  Future<void> register(String loginId, String password) async {
     _error = null;
     try {
       _validateLoginId(loginId);
@@ -98,20 +92,16 @@ class AuthProvider extends ChangeNotifier {
       _loginId = loginId;
       _status = AuthStatus.authenticated;
       notifyListeners();
-      return null;
     } on AuthException catch (e) {
       _error = _translateAuthError(e.message);
       notifyListeners();
-      return null;
     } on PostgrestException catch (e) {
       _error = _translateAuthError(e.message);
       notifyListeners();
-      return null;
     } catch (e, st) {
       Log.e('AUTH', 'register 실패', e, st);
       _error = '회원가입에 실패했습니다.';
       notifyListeners();
-      return null;
     }
   }
 

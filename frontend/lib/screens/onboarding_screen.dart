@@ -31,6 +31,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   Future<void> _initChat() async {
     context.read<ChatProvider>().updateAuth(context.read<AuthProvider>());
     final chat = context.read<ChatProvider>();
+    chat.addListener(_onChatStateChange);
     if (chat.state == ChatState.idle) {
       setState(() => _creating = true);
       await chat.createChat();
@@ -38,12 +39,12 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       setState(() => _creating = false);
       if (chat.state == ChatState.active) {
         _goToChat();
+        return;
       }
     } else if (chat.state == ChatState.active) {
       _goToChat();
+      return;
     }
-    // waiting 상태면 폴링이 자동으로 파트너 입장을 감지해 onboarding→chat 전환
-    context.read<ChatProvider>().addListener(_onChatStateChange);
   }
 
   void _onChatStateChange() {

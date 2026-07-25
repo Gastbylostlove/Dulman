@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import 'onboarding_screen.dart';
-import 'chat_room_screen.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -57,7 +56,7 @@ class _AuthScreenState extends State<AuthScreen>
       _error = null;
     });
     final auth = context.read<AuthProvider>();
-    final activeChatId = await auth.login(id, pw);
+    await auth.login(id, pw);
     if (!mounted) return;
     setState(() => _loading = false);
 
@@ -65,7 +64,7 @@ class _AuthScreenState extends State<AuthScreen>
       setState(() => _error = auth.error);
       return;
     }
-    _navigateAfterAuth(activeChatId);
+    _navigateAfterAuth();
   }
 
   Future<void> _handleSignup() async {
@@ -89,7 +88,7 @@ class _AuthScreenState extends State<AuthScreen>
       _error = null;
     });
     final auth = context.read<AuthProvider>();
-    final activeChatId = await auth.register(id, pw);
+    await auth.register(id, pw);
     if (!mounted) return;
     setState(() => _loading = false);
 
@@ -97,24 +96,16 @@ class _AuthScreenState extends State<AuthScreen>
       setState(() => _error = auth.error);
       return;
     }
-    _navigateAfterAuth(activeChatId);
+    _navigateAfterAuth();
   }
 
-  void _navigateAfterAuth(int? activeChatId) async {
+  void _navigateAfterAuth() {
     final auth = context.read<AuthProvider>();
     final chat = context.read<ChatProvider>();
     chat.updateAuth(auth);
-    if (activeChatId != null) {
-      await chat.loadActiveChat(knownChatId: activeChatId);
-      if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const ChatRoomScreen()),
-      );
-    } else {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const OnboardingScreen()),
-      );
-    }
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => const OnboardingScreen()),
+    );
   }
 
   @override

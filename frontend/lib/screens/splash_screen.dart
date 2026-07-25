@@ -4,7 +4,6 @@ import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import 'auth_screen.dart';
 import 'onboarding_screen.dart';
-import 'chat_room_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -24,7 +23,7 @@ class _SplashScreenState extends State<SplashScreen> {
     final auth = context.read<AuthProvider>();
     final chat = context.read<ChatProvider>();
 
-    final activeChatId = await auth.init();
+    await auth.init();
     chat.updateAuth(auth);
 
     if (!mounted) return;
@@ -34,13 +33,7 @@ class _SplashScreenState extends State<SplashScreen> {
       return;
     }
 
-    if (activeChatId != null) {
-      await chat.loadActiveChat(knownChatId: activeChatId);
-      if (!mounted) return;
-      _go(const ChatRoomScreen());
-    } else {
-      _go(const OnboardingScreen());
-    }
+    _go(const OnboardingScreen());
   }
 
   void _go(Widget screen) {
