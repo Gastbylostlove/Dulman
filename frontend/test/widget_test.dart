@@ -151,6 +151,28 @@ void main() {
     expect(accessed.canView, isFalse);
   });
 
+  test('sender media access does not consume a limited view locally', () {
+    final original = Message(
+      id: 12,
+      senderId: 'alice',
+      type: 'media',
+      permissionType: 'once',
+      viewCount: 0,
+      media: const [
+        MediaItem(mediaId: 7, url: '7/original.jpg', mimeType: 'image/jpeg'),
+      ],
+      createdAt: DateTime.parse('2026-07-25T00:00:00Z'),
+    );
+
+    final accessed = original.withAccessedMediaUrls(
+      ['https://signed.example.com/original.jpg?token=abc'],
+      consumesView: false,
+    );
+
+    expect(accessed.viewCount, 0);
+    expect(accessed.canView, isTrue);
+  });
+
   test('listMessages DESC cursor logic: beforeMessageId와 afterMessageId는 배타적', () {
     // beforeMessageId → 오래된 메시지 더 불러오기
     // afterMessageId  → 새 메시지 증분 로드

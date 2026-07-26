@@ -231,6 +231,8 @@ class ApiClient {
         body: {'chat_id': chatId, 'files': files},
       );
       return Map<String, dynamic>.from(result.data as Map);
+    } on FunctionException catch (e) {
+      throw _mapFunctionException(e, fallbackCode: 'MEDIA_UPLOAD_FAILED');
     } catch (e) {
       throw ApiException('MEDIA_UPLOAD_FAILED', '업로드 권한 발급 실패: $e');
     }
@@ -292,6 +294,8 @@ class ApiClient {
         body: {'message_id': messageId},
       );
       return Map<String, dynamic>.from(result.data as Map);
+    } on FunctionException catch (e) {
+      throw _mapFunctionException(e, fallbackCode: 'MEDIA_ACCESS_FAILED');
     } catch (e) {
       throw ApiException('MEDIA_ACCESS_FAILED', '미디어 열람 실패: $e');
     }
@@ -337,11 +341,15 @@ class ApiClient {
       _ when message.contains('CHAT_ACTIVE_EXISTS') => 'CHAT_ACTIVE_EXISTS',
       _ when message.contains('CHAT_INVITE_NOT_FOUND') => 'CHAT_INVITE_NOT_FOUND',
       _ when message.contains('CHAT_INVITE_RATE_LIMITED') => 'CHAT_INVITE_RATE_LIMITED',
+      _ when message.contains('CHAT_SELF_JOIN') => 'CHAT_SELF_JOIN',
       _ when message.contains('CHAT_FULL') => 'CHAT_FULL',
       _ when message.contains('CHAT_NOT_ACTIVE') => 'CHAT_NOT_ACTIVE',
       _ when message.contains('CHAT_NOT_FOUND') => 'CHAT_NOT_FOUND',
       _ when message.contains('CHAT_PARTICIPANT_REQUIRED') => 'CHAT_PARTICIPANT_REQUIRED',
       _ when message.contains('AUTH_REQUIRED') => 'AUTH_REQUIRED',
+      _ when message.contains('AUTH_SESSION_EXPIRED') => 'AUTH_SESSION_EXPIRED',
+      _ when message.contains('AUTH_DEVICE_REPLACED') => 'AUTH_DEVICE_REPLACED',
+      _ when message.contains('MEDIA_VIEW_LIMIT_EXCEEDED') => 'MEDIA_VIEW_LIMIT_EXCEEDED',
       _ when message.contains('MESSAGE_INVALID') => 'MESSAGE_INVALID',
       _ when message.contains('MESSAGE_NOT_FOUND') => 'MESSAGE_NOT_FOUND',
       _ when message.contains('RATE_LIMITED') => 'RATE_LIMITED',
@@ -358,13 +366,54 @@ class ApiClient {
         'CHAT_ACTIVE_EXISTS' => '이미 활성 채팅방이 있습니다.',
         'CHAT_INVITE_NOT_FOUND' => '초대코드를 찾을 수 없습니다.',
         'CHAT_INVITE_RATE_LIMITED' => '시도 횟수 초과. 5분 후 다시 시도해주세요.',
+        'CHAT_SELF_JOIN' => '본인이 만든 초대코드입니다. 다른 계정으로 로그인해주세요.',
         'CHAT_FULL' => '이미 참여자가 있는 채팅방입니다.',
         'CHAT_NOT_ACTIVE' => '종료된 채팅방입니다.',
-        'AUTH_REQUIRED' => '로그인 세션이 만료되었습니다. 다시 로그인해주세요.',
+        'AUTH_REQUIRED' || 'AUTH_SESSION_EXPIRED' => '로그인 세션이 만료되었습니다. 다시 로그인해주세요.',
+        'AUTH_DEVICE_REPLACED' => '다른 기기에서 로그인되어 현재 세션이 종료되었습니다.',
+        'MEDIA_VIEW_LIMIT_EXCEEDED' => '열람 횟수를 초과했습니다.',
+        'MEDIA_INVALID' => '미디어 파일을 확인해주세요.',
+        'MEDIA_UPLOAD_FAILED' => '업로드 권한 발급에 실패했습니다.',
+        'MEDIA_ACCESS_FAILED' => '미디어 열람에 실패했습니다.',
         'PGRST202' => '서버에 채팅 생성 함수가 배포되지 않았습니다.',
         '42501' => '서버 권한 설정을 확인해주세요.',
         'MESSAGE_INVALID' => '메시지를 확인해주세요.',
         'RATE_LIMITED' => '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.',
         _ => '요청을 처리하지 못했습니다. ($code)',
       };
+
+  /// Converts an Edge Function error into the app's stable error contract.
+  static ApiException _mapFunctionException(
+    FunctionException error, {
+    required String fallbackCode,
+  }) {
+    final details = error.details;
+    final rawCode = details is Map ? details['error'] : null;
+    final message = details is Map && details['message'] is String
+        ? details['message'] as String
+        : '';
+    final code = switch (true) {
+      _ when message.contains('MEDIA_VIEW_LIMIT_EXCEEDED') ||
+          rawCode == 'MEDIA_VIEW_LIMIT_EXCEEDED' => 'MEDIA_VIEW_LIMIT_EXCEEDED',
+      _ when message.contains('MEDIA_INVALID') || rawCode == 'MEDIA_INVALID' =>
+        'MEDIA_INVALID',
+      _ when message.contains('MESSAGE_NOT_FOUND') ||
+          rawCode == 'MESSAGE_NOT_FOUND' => 'MESSAGE_NOT_FOUND',
+      _ when message.contains('MESSAGE_INVALID') ||
+          rawCode == 'MESSAGE_INVALID' => 'MESSAGE_INVALID',
+      _ when message.contains('CHAT_NOT_ACTIVE') ||
+          rawCode == 'CHAT_NOT_ACTIVE' => 'CHAT_NOT_ACTIVE',
+      _ when message.contains('CHAT_PARTICIPANT_REQUIRED') ||
+          rawCode == 'CHAT_PARTICIPANT_REQUIRED' => 'CHAT_PARTICIPANT_REQUIRED',
+      _ when message.contains('AUTH_REQUIRED') || rawCode == 'AUTH_REQUIRED' =>
+        'AUTH_REQUIRED',
+      _ when message.contains('RATE_LIMITED') || rawCode == 'RATE_LIMITED' =>
+        'RATE_LIMITED',
+      _ when rawCode == 'MEDIA_UPLOAD_SIGN_FAILED' => 'MEDIA_UPLOAD_FAILED',
+      _ when rawCode == 'MEDIA_SIGN_FAILED' => 'MEDIA_ACCESS_FAILED',
+      _ when error.status == 401 => 'AUTH_REQUIRED',
+      _ => fallbackCode,
+    };
+    return ApiException(code, _messageFor(code));
+  }
 }
