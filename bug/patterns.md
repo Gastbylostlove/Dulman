@@ -239,3 +239,23 @@ executor를 사용하는 모든 작업 전에 `ensureOpen` 선행 필수.
 
 **파일:** `frontend/lib/screens/splash_screen.dart`, `frontend/lib/providers/auth_provider.dart`
 **커밋:** 356a68e | **픽스:** 2026-07-26
+
+---
+
+## [BUG-011] 대기 애니메이션 — 소프트웨어 렌더러 CPU 과점유
+
+**증상:** 초대코드 화면에서 상대방을 기다리는 동안 Android Emulator의
+`qemu-system-aarch64` CPU 사용률이 600% 이상으로 유지됨.
+
+**원인:** 대기 상태의 `CircularProgressIndicator`가 60fps 렌더링을 계속 요청하고,
+AVD의 `auto` GPU 설정이 CPU 기반 `lavapipe` 렌더러로 선택되어 모든 프레임을 CPU에서 처리함.
+상대방 상태 확인은 Supabase Realtime WebSocket이며 polling이나 반복 조회가 아니었음.
+
+**수정:** Realtime 구독은 유지하고 대기 인디케이터만 정적
+`Icons.hourglass_empty` 아이콘으로 교체함.
+
+**재발 위험:** 종료 시점이 없는 대기 화면의 반복 애니메이션. 성능 측정 시 앱 프로세스와
+에뮬레이터 프로세스를 구분하고 실제 AVD GPU 모드도 함께 확인할 것.
+
+**파일:** `frontend/lib/screens/onboarding_screen.dart`
+**커밋:** a6b62d8 | **픽스:** 2026-07-26

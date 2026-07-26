@@ -2,6 +2,7 @@
 
 | ID | 날짜 | 커밋 | 파일 | 한줄 요약 |
 |----|------|------|------|-----------|
+| [BUG-011](patterns.md#bug-011-대기-애니메이션--소프트웨어-렌더러-cpu-과점유) | 2026-07-26 | a6b62d8 | onboarding_screen.dart | 무기한 회전 애니메이션과 lavapipe 조합 → 에뮬레이터 CPU 과점유 |
 | [BUG-010](patterns.md#bug-010-항상-null-반환-함수의-반환값으로-분기) | 2026-07-26 | 356a68e | splash_screen.dart, auth_provider.dart | 항상 null인 반환값으로 분기 → 도달 불가능한 코드 |
 | [BUG-001](patterns.md#bug-001-async-initstate--네비게이션-후-코드-계속-실행) | 2026-07-26 | 356a68e | onboarding_screen.dart | addListener가 navigate 이후 등록 → 이중 탐색 |
 | [BUG-008](patterns.md#bug-008-마이그레이션에서-rls-정책-삭제-후-대체-없음) | 2026-07-25 | 826caa9 | 20260725200000_restore_storage_insert_rls.sql | RLS DROP 후 대체 정책 없음 → Storage 업로드 개방 |
