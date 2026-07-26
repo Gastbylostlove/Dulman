@@ -341,12 +341,16 @@ class ApiClient {
       _ when message.contains('CHAT_NOT_ACTIVE') => 'CHAT_NOT_ACTIVE',
       _ when message.contains('CHAT_NOT_FOUND') => 'CHAT_NOT_FOUND',
       _ when message.contains('CHAT_PARTICIPANT_REQUIRED') => 'CHAT_PARTICIPANT_REQUIRED',
+      _ when message.contains('AUTH_REQUIRED') => 'AUTH_REQUIRED',
       _ when message.contains('MESSAGE_INVALID') => 'MESSAGE_INVALID',
       _ when message.contains('MESSAGE_NOT_FOUND') => 'MESSAGE_NOT_FOUND',
       _ when message.contains('RATE_LIMITED') => 'RATE_LIMITED',
       _ => error.code ?? 'SUPABASE_ERROR',
     };
-    Log.w('SUPABASE', 'Error [$code]');
+    Log.w(
+      'SUPABASE',
+      'Error [$code] ${error.message} details=${error.details} hint=${error.hint}',
+    );
     return ApiException(code, _messageFor(code));
   }
 
@@ -356,8 +360,11 @@ class ApiClient {
         'CHAT_INVITE_RATE_LIMITED' => '시도 횟수 초과. 5분 후 다시 시도해주세요.',
         'CHAT_FULL' => '이미 참여자가 있는 채팅방입니다.',
         'CHAT_NOT_ACTIVE' => '종료된 채팅방입니다.',
+        'AUTH_REQUIRED' => '로그인 세션이 만료되었습니다. 다시 로그인해주세요.',
+        'PGRST202' => '서버에 채팅 생성 함수가 배포되지 않았습니다.',
+        '42501' => '서버 권한 설정을 확인해주세요.',
         'MESSAGE_INVALID' => '메시지를 확인해주세요.',
         'RATE_LIMITED' => '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.',
-        _ => '요청을 처리하지 못했습니다.',
+        _ => '요청을 처리하지 못했습니다. ($code)',
       };
 }

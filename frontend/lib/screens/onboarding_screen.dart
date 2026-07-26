@@ -33,17 +33,21 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     final chat = context.read<ChatProvider>();
     chat.addListener(_onChatStateChange);
     if (chat.state == ChatState.idle) {
-      setState(() => _creating = true);
-      await chat.createChat();
-      if (!mounted) return;
-      setState(() => _creating = false);
-      if (chat.state == ChatState.active) {
-        _goToChat();
-        return;
-      }
+      await _createChat(chat);
     } else if (chat.state == ChatState.active) {
       _goToChat();
       return;
+    }
+  }
+
+  Future<void> _createChat(ChatProvider chat) async {
+    if (!mounted) return;
+    setState(() => _creating = true);
+    await chat.createChat();
+    if (!mounted) return;
+    setState(() => _creating = false);
+    if (chat.state == ChatState.active) {
+      _goToChat();
     }
   }
 
@@ -178,7 +182,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             child: TabBarView(
               controller: _tab,
               children: [
-                _CreateTab(chat: chat, creating: _creating),
+                _CreateTab(
+                  chat: chat,
+                  creating: _creating,
+                  onRetry: () => _createChat(chat),
+                ),
                 _JoinTab(
                   ctrl: _inviteInputCtrl,
                   joining: _joining,
@@ -199,8 +207,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 class _CreateTab extends StatelessWidget {
   final ChatProvider chat;
   final bool creating;
+  final VoidCallback onRetry;
 
-  const _CreateTab({required this.chat, required this.creating});
+  const _CreateTab({
+    required this.chat,
+    required this.creating,
+    required this.onRetry,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -265,7 +278,7 @@ class _CreateTab extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 10),
-                if (creating || chat.inviteCode == null)
+                if (creating)
                   const SizedBox(
                     height: 32,
                     child: CircularProgressIndicator(
@@ -273,7 +286,7 @@ class _CreateTab extends StatelessWidget {
                       strokeWidth: 2,
                     ),
                   )
-                else
+                else if (chat.inviteCode != null)
                   Text(
                     chat.inviteCode!,
                     style: const TextStyle(
@@ -283,6 +296,21 @@ class _CreateTab extends StatelessWidget {
                       letterSpacing: 2,
                       color: Color(0xFF1A1A1A),
                     ),
+                  )
+                else
+                  Column(
+                    children: [
+                      Text(
+                        chat.createError ?? '초대코드를 생성하지 못했습니다.',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Color(0xFFAE2F34)),
+                      ),
+                      const SizedBox(height: 8),
+                      TextButton(
+                        onPressed: onRetry,
+                        child: const Text('다시 시도'),
+                      ),
+                    ],
                   ),
               ],
             ),
@@ -319,13 +347,10 @@ class _CreateTab extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.grey,
-                  ),
+                const Icon(
+                  Icons.hourglass_empty,
+                  size: 16,
+                  color: Colors.grey,
                 ),
                 const SizedBox(width: 8),
                 const Text(

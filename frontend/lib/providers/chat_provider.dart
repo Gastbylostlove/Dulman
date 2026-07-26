@@ -21,6 +21,7 @@ class ChatProvider extends ChangeNotifier {
   RealtimeChannel? _realtimeChannel;
   int _partnerLastReadMessageId = 0;
   String? _accessToken;
+  String? _createError;
   String? _sendError;
   bool _isSending = false;
 
@@ -33,6 +34,7 @@ class ChatProvider extends ChangeNotifier {
 
   int? get chatId => _chatId;
   String? get inviteCode => _inviteCode;
+  String? get createError => _createError;
   ChatState get state => _state;
   List<Message> get messages => _messages;
   String? get sendError => _sendError;
@@ -49,12 +51,18 @@ class ChatProvider extends ChangeNotifier {
 
   // 채팅방 생성
   Future<bool> createChat() async {
-    if (_accessToken == null) return false;
+    _createError = null;
+    if (_accessToken == null) {
+      _createError = '인증 오류';
+      notifyListeners();
+      return false;
+    }
     Log.i('CHAT', 'createChat 시작');
     try {
       final result = await ApiClient.createChat(_accessToken!);
       _chatId = result['chat_id'] as int;
       _inviteCode = result['invite_code'] as String;
+      _createError = null;
       _state = ChatState.waiting;
       Log.i('CHAT', '채팅방 생성됨: chatId=$_chatId  inviteCode=$_inviteCode');
       _subscribeToChat();
@@ -66,7 +74,14 @@ class ChatProvider extends ChangeNotifier {
         await loadActiveChat();
         return true;
       }
+      _createError = e.message;
       Log.e('CHAT', 'createChat 실패: [${e.code}] ${e.message}');
+      notifyListeners();
+      return false;
+    } catch (e, st) {
+      _createError = '초대코드 생성에 실패했습니다.';
+      Log.e('CHAT', 'createChat 예기치 않은 실패', e, st);
+      notifyListeners();
       return false;
     }
   }
