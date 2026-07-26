@@ -21,6 +21,8 @@ class ChatProvider extends ChangeNotifier {
   RealtimeChannel? _realtimeChannel;
   int _partnerLastReadMessageId = 0;
   String? _accessToken;
+  String? _loginId;
+  String? _createError;
   String? _sendError;
   bool _isSending = false;
 
@@ -33,6 +35,9 @@ class ChatProvider extends ChangeNotifier {
 
   int? get chatId => _chatId;
   String? get inviteCode => _inviteCode;
+
+  /// User-safe failure from the latest chat creation attempt.
+  String? get createError => _createError;
   ChatState get state => _state;
   List<Message> get messages => _messages;
   String? get sendError => _sendError;
@@ -45,18 +50,28 @@ class ChatProvider extends ChangeNotifier {
 
   void updateAuth(AuthProvider authProvider) {
     _accessToken = authProvider.accessToken;
+    _loginId = authProvider.loginId;
   }
 
   // 채팅방 생성
   Future<bool> createChat() async {
-    if (_accessToken == null) return false;
+    _createError = null;
+    if (_accessToken == null) {
+      _chatId = null;
+      _inviteCode = null;
+      _state = ChatState.idle;
+      _createError = '인증 오류';
+      notifyListeners();
+      return false;
+    }
     Log.i('CHAT', 'createChat 시작');
     try {
       final result = await ApiClient.createChat(_accessToken!);
       _chatId = result['chat_id'] as int;
       _inviteCode = result['invite_code'] as String;
+      _createError = null;
       _state = ChatState.waiting;
-      Log.i('CHAT', '채팅방 생성됨: chatId=$_chatId  inviteCode=$_inviteCode');
+      Log.i('CHAT', '채팅방 생성됨: chatId=$_chatId');
       _subscribeToChat();
       notifyListeners();
       return true;
@@ -66,7 +81,20 @@ class ChatProvider extends ChangeNotifier {
         await loadActiveChat();
         return true;
       }
+      _createError = e.message;
+      _chatId = null;
+      _inviteCode = null;
+      _state = ChatState.idle;
       Log.e('CHAT', 'createChat 실패: [${e.code}] ${e.message}');
+      notifyListeners();
+      return false;
+    } catch (e, st) {
+      _chatId = null;
+      _inviteCode = null;
+      _state = ChatState.idle;
+      _createError = '초대코드 생성에 실패했습니다.';
+      Log.e('CHAT', 'createChat 예기치 않은 실패', e, st);
+      notifyListeners();
       return false;
     }
   }
@@ -79,16 +107,28 @@ class ChatProvider extends ChangeNotifier {
       final result = await ApiClient.getActiveChat(_accessToken!);
       final id = knownChatId ?? result['active_chat_id'] as int?;
       if (id == null) {
+        final wasActive = _chatId != null && _state == ChatState.active;
         Log.i('CHAT', 'loadActiveChat: 활성 채팅방 없음');
-        _state = ChatState.idle;
+        if (wasActive) {
+          _stopRealtime();
+        }
+        _chatId = null;
+        _inviteCode = null;
+        _createError = null;
+        _state = wasActive ? ChatState.ended : ChatState.idle;
         notifyListeners();
         return;
       }
       _chatId = id;
-      _inviteCode = null;
       final status = result['status'] as String? ?? 'active';
       _lastResetAt = _parseTimestamp(result['last_reset_at']);
       _state = status == 'active' ? ChatState.active : ChatState.waiting;
+      _inviteCode = _state == ChatState.waiting
+          ? result['invite_code'] as String?
+          : null;
+      _createError = _state == ChatState.waiting && _inviteCode == null
+          ? '초대코드를 불러오지 못했습니다.'
+          : null;
       Log.i('CHAT', 'loadActiveChat: chatId=$_chatId  status=$status → state=$_state');
       if (_state == ChatState.active) {
         await _loadMessages(replace: true);
@@ -110,7 +150,7 @@ class ChatProvider extends ChangeNotifier {
   // 초대코드로 입장
   Future<String?> joinChat(String inviteCode) async {
     if (_accessToken == null) return '인증 오류';
-    Log.i('CHAT', 'joinChat: code=$inviteCode');
+    Log.i('CHAT', 'joinChat 시작');
     try {
       final result = await ApiClient.joinChat(_accessToken!, inviteCode);
       _chatId = result['chat_id'] as int;
@@ -128,6 +168,7 @@ class ChatProvider extends ChangeNotifier {
         case 'CHAT_INVITE_NOT_FOUND': return '초대코드를 찾을 수 없습니다.';
         case 'CHAT_INVITE_RATE_LIMITED': return '시도 횟수 초과. 5분 후 다시 시도해주세요.';
         case kErrChatActiveExists: return '이미 활성 채팅방이 있습니다.';
+        case 'CHAT_SELF_JOIN': return '본인이 만든 초대코드입니다. 다른 계정으로 로그인해주세요.';
         case 'CHAT_FULL': return '이미 참여자가 있는 채팅방입니다.';
         case 'CHAT_NOT_ACTIVE': return '종료된 채팅방입니다.';
         default: return e.message;
@@ -141,7 +182,7 @@ class ChatProvider extends ChangeNotifier {
     _sendError = null;
     _isSending = true;
     notifyListeners();
-    Log.i('CHAT', 'sendText: "${text.length > 30 ? '${text.substring(0, 30)}...' : text}"');
+    Log.i('CHAT', 'sendText: ${text.length}자');
 
     try {
       await ApiClient.sendText(_accessToken!, _chatId!, text.trim());
@@ -161,7 +202,7 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
-  // 미디어 열람 (view_count 차감 후 signed URL로 message 내 media URL 갱신)
+  // 미디어 열람 (수신자만 view_count 차감 후 signed URL로 갱신)
   Future<({String? error, List<String> urls})> accessMedia(int messageId) async {
     if (_accessToken == null) {
       return (error: '인증 오류', urls: const <String>[]);
@@ -179,7 +220,10 @@ class ChatProvider extends ChangeNotifier {
           throw ApiException('MEDIA_ACCESS_FAILED', '미디어 응답이 올바르지 않습니다.');
         }
         _messages = List<Message>.from(_messages)
-          ..[idx] = msg.withAccessedMediaUrls(signedUrls);
+          ..[idx] = msg.withAccessedMediaUrls(
+            signedUrls,
+            consumesView: msg.senderId != _loginId,
+          );
         notifyListeners();
       }
       Log.i('CHAT', 'accessMedia 완료: messageId=$messageId  urls=${signedUrls.length}개');
