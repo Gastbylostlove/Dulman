@@ -19,7 +19,13 @@ Deno.serve(async (request) => {
   const authorization = request.headers.get('authorization');
   if (!authorization) return json({error: 'AUTH_REQUIRED'}, 401);
 
-  const {message_id: messageId} = await request.json();
+  let messageId: number;
+  try {
+    const body = await request.json();
+    messageId = body?.message_id;
+  } catch {
+    return json({error: 'MESSAGE_INVALID'}, 400);
+  }
   if (!Number.isSafeInteger(messageId)) return json({error: 'MESSAGE_INVALID'}, 400);
 
   const callRpc = async (functionName: string) => {

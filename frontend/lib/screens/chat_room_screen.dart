@@ -152,7 +152,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     );
 
     // 1. 업로드 인텐트 발급
-    final fileInfos = files.map((f) {
+    final fileInfos = await Future.wait(files.map((f) async {
       final ext = f.name.split('.').last.toLowerCase();
       final detectedMime = f.mimeType;
       final mime = detectedMime == 'image/jpg'
@@ -166,9 +166,9 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                   'mp4' => 'video/mp4',
                   _ => 'application/octet-stream',
                 };
-      final bytes = File(f.path).lengthSync();
+      final bytes = await File(f.path).length();
       return {'client_file_id': f.name, 'mime_type': mime, 'byte_size': bytes};
-    }).toList();
+    }));
 
     try {
       Log.i('MEDIA', '[1/3] 업로드 인텐트 요청');
