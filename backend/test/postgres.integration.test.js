@@ -20,10 +20,9 @@ integration("Postgres repository persists the documented chat flow", async () =>
   try {
     await repository.migrate();
     const service = createService({
-      repository,
-      tokenSecret: config.tokenSecret,
-      publicUrl: config.publicUrl,
-    });
+    repository,
+    tokenSecret: config.tokenSecret,
+  });
 
     const alice = `${prefix}_alice`;
     const bob = `${prefix}_bob`;

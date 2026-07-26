@@ -11,7 +11,6 @@ import { randomUUID } from "node:crypto";
  * @param {object} [options.store]
  * @param {() => Date} [options.now]
  * @param {string} [options.tokenSecret]
- * @param {string} [options.publicUrl]
  * @returns {object}
  */
 export function createService({
@@ -19,7 +18,6 @@ export function createService({
   store,
   now = () => new Date(),
   tokenSecret = "dulman-secret",
-  publicUrl = "https://storage.local",
 } = {}) {
   const repo = repository ?? store;
   if (!repo) throw new Error("repository is required");
@@ -32,7 +30,6 @@ export function createService({
     createChat: (accessToken) => createChat(repo, accessToken, now, tokenSecret),
     joinChat: (accessToken, input) => joinChat(repo, accessToken, input, now, tokenSecret),
     listMessages: (accessToken, input) => listMessages(repo, accessToken, input, tokenSecret),
-    createMediaUploadIntent: (accessToken, input) => createMediaUploadIntent(repo, accessToken, input, publicUrl, tokenSecret),
     sendMessage: (accessToken, input) => sendMessage(repo, accessToken, input, now, tokenSecret),
     accessMedia: (accessToken, input) => accessMedia(repo, accessToken, input, tokenSecret),
     resetChat: (accessToken, input) => resetChat(repo, accessToken, input, now, tokenSecret),
@@ -261,25 +258,6 @@ async function listMessages(repo, accessToken, input, tokenSecret) {
   };
 }
 
-async function createMediaUploadIntent(repo, accessToken, input, publicUrl, tokenSecret) {
-  const account = await authenticate(repo, accessToken, tokenSecret);
-  const chat = await requireChat(repo, input.chat_id);
-  ensureParticipant(chat, account.login_id);
-  ensureActive(chat);
-
-  const files = input.files ?? [];
-  validateMediaBatch(files);
-
-  return {
-    upload_items: files.map((file) => ({
-      client_file_id: file.client_file_id,
-      upload_url: `/uploads/${chat.id}/${file.client_file_id}`,
-      media_url: `/media/${chat.id}/${file.client_file_id}`,
-      mime_type: file.mime_type,
-    })),
-  };
-}
-
 async function sendMessage(repo, accessToken, input, now, tokenSecret) {
   return withTransaction(repo, async (tx) => {
     const account = await authenticate(tx, accessToken, tokenSecret);
@@ -373,12 +351,13 @@ async function accessMedia(repo, accessToken, input, tokenSecret) {
     ensureParticipant(chat, account.login_id);
     ensureActive(chat);
 
+    const isSender = message.sender_id === account.login_id;
     const allowedViews = allowedMediaViews(message.permission_type);
-    if (message.view_count >= allowedViews) {
+    if (!isSender && message.view_count >= allowedViews) {
       throw createAppError(ERROR_CODES.MEDIA_VIEW_LIMIT_EXCEEDED, "열람 횟수를 초과했습니다.");
     }
 
-    const nextViewCount = message.view_count + 1;
+    const nextViewCount = isSender ? message.view_count : message.view_count + 1;
     const updated = await tx.updateMessage(message.id, {
       view_count: nextViewCount,
     });

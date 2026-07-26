@@ -14,7 +14,7 @@ class OnboardingScreen extends StatefulWidget {
 }
 
 class _OnboardingScreenState extends State<OnboardingScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late final TabController _tab;
   final _inviteInputCtrl = TextEditingController();
   bool _joining = false;
@@ -24,27 +24,44 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _tab = TabController(length: 2, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _initChat());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      context.read<ChatProvider>().loadActiveChat();
+    }
   }
 
   Future<void> _initChat() async {
     context.read<ChatProvider>().updateAuth(context.read<AuthProvider>());
     final chat = context.read<ChatProvider>();
-    chat.addListener(_onChatStateChange);
-    if (chat.state == ChatState.idle) {
-      setState(() => _creating = true);
-      await chat.createChat();
-      if (!mounted) return;
-      setState(() => _creating = false);
-      if (chat.state == ChatState.active) {
-        _goToChat();
-        return;
-      }
-    } else if (chat.state == ChatState.active) {
+    await chat.loadActiveChat();
+    if (!mounted) return;
+    if (chat.state == ChatState.active) {
       _goToChat();
       return;
     }
+    chat.addListener(_onChatStateChange);
+    if (chat.forcedLogout) {
+      _handleForcedLogout();
+      return;
+    }
+    if (chat.state == ChatState.idle) {
+      await _createChat(chat);
+    }
+  }
+
+  /// Creates a chat only after the existing waiting/active chat was checked.
+  Future<void> _createChat(ChatProvider chat) async {
+    if (!mounted) return;
+    setState(() => _creating = true);
+    await chat.createChat();
+    if (!mounted) return;
+    setState(() => _creating = false);
   }
 
   void _onChatStateChange() {
@@ -114,6 +131,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     context.read<ChatProvider>().removeListener(_onChatStateChange);
     _tab.dispose();
     _inviteInputCtrl.dispose();
@@ -178,7 +196,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             child: TabBarView(
               controller: _tab,
               children: [
-                _CreateTab(chat: chat, creating: _creating),
+                _CreateTab(
+                  chat: chat,
+                  creating: _creating,
+                  onRetry: () => _createChat(chat),
+                ),
                 _JoinTab(
                   ctrl: _inviteInputCtrl,
                   joining: _joining,
@@ -199,8 +221,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 class _CreateTab extends StatelessWidget {
   final ChatProvider chat;
   final bool creating;
+  final VoidCallback onRetry;
 
-  const _CreateTab({required this.chat, required this.creating});
+  const _CreateTab({
+    required this.chat,
+    required this.creating,
+    required this.onRetry,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -265,7 +292,7 @@ class _CreateTab extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 10),
-                if (creating || chat.inviteCode == null)
+                if (creating)
                   const SizedBox(
                     height: 32,
                     child: CircularProgressIndicator(
@@ -273,7 +300,8 @@ class _CreateTab extends StatelessWidget {
                       strokeWidth: 2,
                     ),
                   )
-                else
+                else if (chat.state == ChatState.waiting &&
+                    chat.inviteCode != null)
                   Text(
                     chat.inviteCode!,
                     style: const TextStyle(
@@ -283,7 +311,24 @@ class _CreateTab extends StatelessWidget {
                       letterSpacing: 2,
                       color: Color(0xFF1A1A1A),
                     ),
-                  ),
+                  )
+                else if (chat.createError != null)
+                  Column(
+                    children: [
+                      Text(
+                        chat.createError!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Color(0xFFAE2F34)),
+                      ),
+                      const SizedBox(height: 8),
+                      TextButton(
+                        onPressed: onRetry,
+                        child: const Text('다시 시도'),
+                      ),
+                    ],
+                  )
+                else
+                  const SizedBox(height: 32),
               ],
             ),
           ),
@@ -319,14 +364,7 @@ class _CreateTab extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.grey,
-                  ),
-                ),
+                const Icon(Icons.hourglass_empty, size: 16, color: Colors.grey),
                 const SizedBox(width: 8),
                 const Text(
                   '상대방이 코드를 입력할 때까지 대기 중...',

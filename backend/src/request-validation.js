@@ -47,14 +47,6 @@ export function validateMessageListQuery(query) {
   };
 }
 
-export function validateMediaUploadIntentInput(input) {
-  const files = requireArray(input, "files");
-  return {
-    chat_id: requirePositiveInteger(input, "chat_id"),
-    files: files.map(validateMediaFile),
-  };
-}
-
 export function validateSendMessageInput(input) {
   const type = requireEnum(input, "type", [MESSAGE_TYPES.TEXT, MESSAGE_TYPES.MEDIA]);
   const base = {
@@ -88,15 +80,6 @@ export function validateRequestBody(input) {
   if (!isPlainObject(input)) {
     throw createAppError(ERROR_CODES.REQUEST_VALIDATION_FAILED, "요청 본문 형식이 올바르지 않습니다.");
   }
-}
-
-function validateMediaFile(file) {
-  validateObject(file, "files item");
-  return {
-    client_file_id: requireString(file, "client_file_id"),
-    mime_type: requireString(file, "mime_type"),
-    byte_size: requireNonNegativeInteger(file, "byte_size"),
-  };
 }
 
 function validateMediaItem(item) {

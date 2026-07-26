@@ -172,28 +172,10 @@ async function createActiveChat(prefix) {
  * @param {string} params.token
  * @param {number} params.chatId
  * @param {string} params.permissionType
- * @param {string} params.clientFileId
  * @returns {Promise<{ messageId: number, mediaUrl: string }>}
  */
 async function createMediaMessage({ token, chatId, permissionType, clientFileId }) {
-  const intent = await requestJson("/api/media-upload-intents", {
-    method: "POST",
-    token,
-    body: {
-      chat_id: chatId,
-      files: [
-        {
-          client_file_id: clientFileId,
-          mime_type: "image/jpeg",
-          byte_size: 1024,
-        },
-      ],
-    },
-  });
-  assert.equal(intent.status, 200);
-  assert.equal(intent.body.upload_items.length, 1);
-
-  const mediaUrl = intent.body.upload_items[0].media_url;
+  const mediaUrl = `${config.publicUrl}/${chatId}/${clientFileId}`;
   const message = await requestJson("/api/messages", {
     method: "POST",
     token,
@@ -407,21 +389,6 @@ test("HTTP chat termination returns ended state and blocks follow-up access", as
     });
     assertHttpError(messagesAfterTermination, 409, "CHAT_NOT_ACTIVE");
 
-    const mediaIntentAfterTermination = await requestJson("/api/media-upload-intents", {
-      method: "POST",
-      token: alice.accessToken,
-      body: {
-        chat_id: chatId,
-        files: [
-          {
-            client_file_id: `${prefix}-after-end`,
-            mime_type: "image/jpeg",
-            byte_size: 1024,
-          },
-        ],
-      },
-    });
-    assertHttpError(mediaIntentAfterTermination, 409, "CHAT_NOT_ACTIVE");
   });
 });
 
@@ -494,7 +461,7 @@ test("HTTP request validation rejects malformed bodies and invalid media permiss
         permission_type: "invalid",
         media_items: [
           {
-            url: `${config.publicUrl}/media/${prefix}/x`,
+            url: `${config.publicUrl}/${prefix}/x`,
             mime_type: "image/jpeg",
           },
         ],
@@ -616,22 +583,6 @@ test("HTTP protected endpoints reject missing and malformed authorization header
         options: {},
       },
       {
-        path: "/api/media-upload-intents",
-        options: {
-          method: "POST",
-          body: {
-            chat_id: 1,
-            files: [
-              {
-                client_file_id: "f1",
-                mime_type: "image/jpeg",
-                byte_size: 1024,
-              },
-            ],
-          },
-        },
-      },
-      {
         path: "/api/messages",
         options: {
           method: "POST",
@@ -713,118 +664,6 @@ test("HTTP invite-code attempts are rate limited after repeated failures", async
   });
 });
 
-test("HTTP media-upload-intents enforce participant, state, and size limits", async () => {
-  await withScenario(async (prefix) => {
-    const { alice, bob, chatId } = await createActiveChat(prefix);
-    const outsider = await createAuthenticatedUser(`${prefix}z`, "pw-z", `${prefix}-device-z`);
-
-    const outsiderIntent = await requestJson("/api/media-upload-intents", {
-      method: "POST",
-      token: outsider.accessToken,
-      body: {
-        chat_id: chatId,
-        files: [
-          {
-            client_file_id: `${prefix}-outsider`,
-            mime_type: "image/jpeg",
-            byte_size: 1024,
-          },
-        ],
-      },
-    });
-    assertHttpError(outsiderIntent, 403, "CHAT_PARTICIPANT_REQUIRED");
-
-    const largeBatch = await requestJson("/api/media-upload-intents", {
-      method: "POST",
-      token: alice.accessToken,
-      body: {
-        chat_id: chatId,
-        files: [
-          {
-            client_file_id: `${prefix}-big-1`,
-            mime_type: "image/jpeg",
-            byte_size: 20 * 1024 * 1024,
-          },
-          {
-            client_file_id: `${prefix}-big-2`,
-            mime_type: "image/jpeg",
-            byte_size: 20 * 1024 * 1024,
-          },
-          {
-            client_file_id: `${prefix}-big-3`,
-            mime_type: "image/jpeg",
-            byte_size: 20 * 1024 * 1024,
-          },
-          {
-            client_file_id: `${prefix}-big-4`,
-            mime_type: "image/jpeg",
-            byte_size: 20 * 1024 * 1024,
-          },
-          {
-            client_file_id: `${prefix}-big-5`,
-            mime_type: "image/jpeg",
-            byte_size: 20 * 1024 * 1024,
-          },
-          {
-            client_file_id: `${prefix}-big-6`,
-            mime_type: "image/jpeg",
-            byte_size: 20 * 1024 * 1024,
-          },
-          {
-            client_file_id: `${prefix}-big-7`,
-            mime_type: "image/jpeg",
-            byte_size: 20 * 1024 * 1024,
-          },
-          {
-            client_file_id: `${prefix}-big-8`,
-            mime_type: "image/jpeg",
-            byte_size: 20 * 1024 * 1024,
-          },
-          {
-            client_file_id: `${prefix}-big-9`,
-            mime_type: "image/jpeg",
-            byte_size: 20 * 1024 * 1024,
-          },
-          {
-            client_file_id: `${prefix}-big-10`,
-            mime_type: "image/jpeg",
-            byte_size: 20 * 1024 * 1024,
-          },
-          {
-            client_file_id: `${prefix}-big-11`,
-            mime_type: "image/jpeg",
-            byte_size: 20 * 1024 * 1024,
-          },
-        ],
-      },
-    });
-    assertHttpError(largeBatch, 413, "MEDIA_LIMIT_EXCEEDED");
-
-    const terminated = await requestJson("/api/chat-terminations", {
-      method: "POST",
-      token: bob.accessToken,
-      body: { chat_id: chatId },
-    });
-    assert.equal(terminated.status, 200);
-
-    const intentAfterTermination = await requestJson("/api/media-upload-intents", {
-      method: "POST",
-      token: alice.accessToken,
-      body: {
-        chat_id: chatId,
-        files: [
-          {
-            client_file_id: `${prefix}-ended`,
-            mime_type: "image/jpeg",
-            byte_size: 1024,
-          },
-        ],
-      },
-    });
-    assertHttpError(intentAfterTermination, 409, "CHAT_NOT_ACTIVE");
-  });
-});
-
 test("HTTP messages enforce participant, state, and payload requirements", async () => {
   await withScenario(async (prefix) => {
     const { alice, bob, chatId } = await createActiveChat(prefix);
@@ -890,7 +729,7 @@ test("HTTP messages enforce participant, state, and payload requirements", async
         permission_type: "keep",
         media_items: [
           {
-            url: `${config.publicUrl}/media/${prefix}/after-ended`,
+            url: `${config.publicUrl}/${prefix}/after-ended`,
             mime_type: "image/jpeg",
           },
         ],
