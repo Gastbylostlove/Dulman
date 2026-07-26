@@ -2,6 +2,7 @@
 
 | ID | 날짜 | 커밋 | 파일 | 한줄 요약 |
 | ---- | ------ | ------ | ------ | ----------- |
+| [BUG-014](patterns.md#bug-014-getactivechat이-waiting-채팅을-active보다-먼저-반환) | 2026-07-26 | (미커밋) | api_client.dart | created_at 정렬로 waiting 채팅이 active보다 우선 반환 |
 | [BUG-013](patterns.md#bug-013-초대코드-셀프조인--구분-불가-에러) | 2026-07-26 | 7400413 | join_chat RPC, onboarding_screen.dart | 셀프조인과 일반 에러 구분 불가 → 엉뚱한 오류 메시지 |
 | [BUG-012](patterns.md#bug-012-발신자-열람이-수신자-조회-횟수를-소진) | 2026-07-26 | 7400413 | 20260726180000_fix_sender_media_view_count.sql | 발신자 확인이 view_count 차감 → 수신자 첫 열람에서 제한 오류 |
 | [BUG-011](patterns.md#bug-011-대기-애니메이션--소프트웨어-렌더러-cpu-과점유) | 2026-07-26 | a6b62d8 | onboarding_screen.dart | 무기한 회전 애니메이션과 lavapipe 조합 → 에뮬레이터 CPU 과점유 |

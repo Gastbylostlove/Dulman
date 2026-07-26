@@ -317,3 +317,29 @@ IF v_chat.user_a_id = v_login_id THEN RAISE EXCEPTION 'CHAT_SELF_JOIN'; END IF;
 
 **파일:** `supabase/migrations/20260726153000_clarify_chat_self_join.sql`, `frontend/lib/screens/onboarding_screen.dart`
 **커밋:** 7400413 | **픽스:** 2026-07-26
+
+---
+
+## [BUG-014] getActiveChat이 waiting 채팅을 active 채팅보다 먼저 반환
+
+**증상:** 참여자 B가 초대코드로 채팅에 참여한 후 앱을 재시작하면
+채팅방으로 이동하지 않고 자신이 먼저 만든 waiting 채팅의 초대코드 화면이 표시됨.
+
+**원인:** `getActiveChat()` 쿼리가 `created_at DESC` 단일 정렬이었음.
+B가 자신의 채팅(`status='waiting'`)을 만든 후 A의 채팅(`status='active'`)에 참여하면
+B의 waiting 채팅이 더 최근에 생성된 것이므로 먼저 반환됨.
+
+**수정:**
+
+```dart
+.order('status', ascending: true)   // 'active' < 'waiting' 알파벳 순서
+.order('created_at', ascending: false)
+```
+
+`status` 기준 오름차순 정렬을 선행해 `active` 채팅이 항상 `waiting`보다 먼저 반환됨.
+
+**재발 위험:** 한 사용자가 여러 상태의 동일 리소스를 동시에 가질 수 있는 모든 쿼리.
+"가장 최신 항목" 정렬만으로는 상태 우선순위를 보장할 수 없음.
+
+**파일:** `frontend/lib/core/api_client.dart`
+**커밋:** (미커밋) | **픽스:** 2026-07-26
