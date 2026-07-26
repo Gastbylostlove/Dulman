@@ -355,7 +355,10 @@ class ApiClient {
       _ when message.contains('RATE_LIMITED') => 'RATE_LIMITED',
       _ => error.code ?? 'SUPABASE_ERROR',
     };
-    Log.w('SUPABASE', 'Error [$code]');
+    Log.w(
+      'SUPABASE',
+      'Error [$code] ${error.message} details=${error.details} hint=${error.hint}',
+    );
     return ApiException(code, _messageFor(code));
   }
 
@@ -374,7 +377,7 @@ class ApiClient {
         'MEDIA_ACCESS_FAILED' => '미디어 열람에 실패했습니다.',
         'MESSAGE_INVALID' => '메시지를 확인해주세요.',
         'RATE_LIMITED' => '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.',
-        _ => '요청을 처리하지 못했습니다.',
+        _ => '요청을 처리하지 못했습니다. ($code)',
       };
 
   /// Converts an Edge Function error into the app's stable error contract.
