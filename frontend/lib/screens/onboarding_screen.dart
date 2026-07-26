@@ -46,9 +46,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     await chat.createChat();
     if (!mounted) return;
     setState(() => _creating = false);
-    if (chat.state == ChatState.active) {
-      _goToChat();
-    }
   }
 
   void _onChatStateChange() {
@@ -297,11 +294,11 @@ class _CreateTab extends StatelessWidget {
                       color: Color(0xFF1A1A1A),
                     ),
                   )
-                else
+                else if (chat.createError != null)
                   Column(
                     children: [
                       Text(
-                        chat.createError ?? '초대코드를 생성하지 못했습니다.',
+                        chat.createError!,
                         textAlign: TextAlign.center,
                         style: const TextStyle(color: Color(0xFFAE2F34)),
                       ),
@@ -311,7 +308,9 @@ class _CreateTab extends StatelessWidget {
                         child: const Text('다시 시도'),
                       ),
                     ],
-                  ),
+                  )
+                else
+                  const SizedBox(height: 32),
               ],
             ),
           ),

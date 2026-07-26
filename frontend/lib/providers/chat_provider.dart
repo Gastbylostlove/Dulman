@@ -100,10 +100,15 @@ class ChatProvider extends ChangeNotifier {
         return;
       }
       _chatId = id;
-      _inviteCode = null;
       final status = result['status'] as String? ?? 'active';
       _lastResetAt = _parseTimestamp(result['last_reset_at']);
       _state = status == 'active' ? ChatState.active : ChatState.waiting;
+      _inviteCode = _state == ChatState.waiting
+          ? result['invite_code'] as String?
+          : null;
+      _createError = _state == ChatState.waiting && _inviteCode == null
+          ? '초대코드를 불러오지 못했습니다.'
+          : null;
       Log.i('CHAT', 'loadActiveChat: chatId=$_chatId  status=$status → state=$_state');
       if (_state == ChatState.active) {
         await _loadMessages(replace: true);
@@ -143,6 +148,7 @@ class ChatProvider extends ChangeNotifier {
         case 'CHAT_INVITE_NOT_FOUND': return '초대코드를 찾을 수 없습니다.';
         case 'CHAT_INVITE_RATE_LIMITED': return '시도 횟수 초과. 5분 후 다시 시도해주세요.';
         case kErrChatActiveExists: return '이미 활성 채팅방이 있습니다.';
+        case 'CHAT_SELF_JOIN': return '본인이 만든 초대코드입니다. 다른 계정으로 로그인해주세요.';
         case 'CHAT_FULL': return '이미 참여자가 있는 채팅방입니다.';
         case 'CHAT_NOT_ACTIVE': return '종료된 채팅방입니다.';
         default: return e.message;
