@@ -16,11 +16,14 @@ class ApiClient {
   static Future<Map<String, dynamic>> getActiveChat(String accessToken) async {
     final loginId = await _currentLoginId();
     try {
+      // active 채팅 우선: 참여자가 waiting/active 채팅을 동시에 가질 수 있으므로
+      // created_at보다 status를 먼저 정렬해 active 채팅을 항상 반환
       final rows = await supabaseClient
           .from('chat')
           .select()
           .or('user_a_id.eq.$loginId,user_b_id.eq.$loginId')
           .inFilter('status', ['waiting', 'active'])
+          .order('status', ascending: true)
           .order('created_at', ascending: false)
           .limit(1);
       if (rows.isEmpty) return {'active_chat_id': null};
