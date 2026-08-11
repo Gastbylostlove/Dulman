@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>계정 삭제 요청 — 둘만</title>
+<style>
+  :root {
+    --bg: #F8F9FA; --surface: #FFFFFF; --border: #E5E7EB;
+    --text: #1A1A2E; --muted: #6B7280; --accent: #1C2B4B; --accent-l: #E8EDF5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0D1117; --surface: #161B22; --border: #30363D;
+      --text: #E6EDF3; --muted: #8B949E; --accent: #79C0FF; --accent-l: #1A2333;
+    }
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', -apple-system, sans-serif;
+    font-size: 15px; line-height: 1.8; padding: 48px 24px 80px;
+  }
+  .wrap { max-width: 680px; margin: 0 auto; }
+  .header { border-bottom: 2px solid var(--accent); padding-bottom: 24px; margin-bottom: 40px; }
+  .label { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
+  h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 8px; }
+  .meta { font-size: 13px; color: var(--muted); }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 28px 32px; margin-bottom: 24px;
+  }
+  h2 { font-size: 17px; font-weight: 700; margin-bottom: 16px; }
+  ol, ul { padding-left: 20px; }
+  li { margin-bottom: 8px; font-size: 14px; color: var(--text); }
+  .highlight {
+    background: var(--accent-l); border-left: 3px solid var(--accent);
+    border-radius: 0 8px 8px 0; padding: 16px 20px; margin: 16px 0;
+    font-size: 14px;
+  }
+  a { color: var(--accent); text-decoration: none; font-weight: 600; }
+  a:hover { text-decoration: underline; }
+  .badge {
+    display: inline-block; background: #FEF3C7; color: #92400E;
+    border-radius: 6px; padding: 2px 10px; font-size: 12px; font-weight: 600; margin-left: 8px;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 12px; }
+  th { background: var(--accent-l); color: var(--accent); font-weight: 700; text-align: left; padding: 10px 14px; border: 1px solid var(--border); }
+  td { padding: 10px 14px; border: 1px solid var(--border); vertical-align: top; }
+  tr:nth-child(even) td { background: var(--bg); }
+  .footer { margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="header">
+    <p class="label">둘만 · Account Deletion</p>
+    <h1>계정 삭제 요청</h1>
+    <p class="meta">서비스: 둘만 (Android) &nbsp;·&nbsp; 개발사: 황앤조</p>
+  </div>
+
+  <div class="card">
+    <h2>계정 삭제 방법</h2>
+    <p style="font-size:14px; margin-bottom:16px;">아래 이메일로 계정 삭제를 요청하시면 <strong>10일 이내</strong>에 처리해 드립니다.</p>
+    <div class="highlight">
+      <strong>삭제 요청 이메일:</strong><br>
+      <a href="mailto:gmlrn9571@gmail.com?subject=계정 삭제 요청&body=삭제를 요청할 계정 ID: ">gmlrn9571@gmail.com</a><br>
+      <span style="font-size:13px; color:var(--muted);">제목: 계정 삭제 요청 / 본문에 삭제할 계정 ID 기재</span>
+    </div>
+    <ol>
+      <li>위 이메일 주소로 이메일을 발송합니다.</li>
+      <li>제목에 <strong>"계정 삭제 요청"</strong>을 기재합니다.</li>
+      <li>본문에 삭제를 원하는 <strong>계정 ID(로그인 ID)</strong>를 적어주세요.</li>
+      <li>접수 확인 이메일을 발송해 드리며, <strong>10일 이내</strong>에 처리됩니다.</li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h2>삭제되는 데이터</h2>
+    <table>
+      <thead>
+        <tr><th>데이터 유형</th><th>처리</th><th>보관 기간</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>계정 정보 (ID, 닉네임)</td><td>즉시 삭제</td><td>—</td></tr>
+        <tr><td>채팅 메시지</td><td>즉시 삭제</td><td>—</td></tr>
+        <tr><td>미디어 파일 (사진·영상)</td><td>즉시 삭제</td><td>—</td></tr>
+        <tr><td>접속 로그</td><td>삭제 <span class="badge">최대 90일</span></td><td>법령에 따라 90일 보관 후 삭제</td></tr>
+      </tbody>
+    </table>
+    <p style="margin-top:12px; font-size:13px; color:var(--muted)">※ 삭제된 데이터는 복구되지 않습니다.</p>
+  </div>
+
+  <div class="card">
+    <h2>문의</h2>
+    <p style="font-size:14px;">계정 삭제 외 개인정보 관련 문의도 동일 이메일로 접수해 주세요.</p>
+    <div class="highlight" style="margin-top:12px;">
+      <a href="mailto:gmlrn9571@gmail.com">gmlrn9571@gmail.com</a>
+    </div>
+  </div>
+
+  <div class="footer">
+    황앤조 &nbsp;·&nbsp; gmlrn9571@gmail.com
+  </div>
+
+</div>
+</body>
+</html>
