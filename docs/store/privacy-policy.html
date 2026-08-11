@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>개인정보처리방침 — 둘만</title>
+<style>
+  :root {
+    --bg:       #F8F9FA;
+    --surface:  #FFFFFF;
+    --border:   #E5E7EB;
+    --text:     #1A1A2E;
+    --muted:    #6B7280;
+    --accent:   #1C2B4B;
+    --accent-l: #E8EDF5;
+    --num:      #1C2B4B;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:       #0D1117;
+      --surface:  #161B22;
+      --border:   #30363D;
+      --text:     #E6EDF3;
+      --muted:    #8B949E;
+      --accent:   #79C0FF;
+      --accent-l: #1A2333;
+      --num:      #58A6FF;
+    }
+  }
+  :root[data-theme="dark"]  {
+    --bg: #0D1117; --surface: #161B22; --border: #30363D;
+    --text: #E6EDF3; --muted: #8B949E; --accent: #79C0FF;
+    --accent-l: #1A2333; --num: #58A6FF;
+  }
+  :root[data-theme="light"] {
+    --bg: #F8F9FA; --surface: #FFFFFF; --border: #E5E7EB;
+    --text: #1A1A2E; --muted: #6B7280; --accent: #1C2B4B;
+    --accent-l: #E8EDF5; --num: #1C2B4B;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 15px;
+    line-height: 1.8;
+    padding: 48px 24px 80px;
+  }
+
+  .wrap { max-width: 720px; margin: 0 auto; }
+
+  .doc-header {
+    border-bottom: 2px solid var(--accent);
+    padding-bottom: 24px;
+    margin-bottom: 40px;
+  }
+  .doc-header .label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--num);
+    margin-bottom: 10px;
+  }
+  .doc-header h1 {
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: -0.02em;
+    line-height: 1.3;
+    margin-bottom: 12px;
+  }
+  .doc-header .meta {
+    font-size: 13px;
+    color: var(--muted);
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+
+  .intro {
+    background: var(--accent-l);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 8px 8px 0;
+    padding: 16px 20px;
+    margin-bottom: 40px;
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.7;
+  }
+
+  .section {
+    margin-bottom: 40px;
+    padding-bottom: 40px;
+    border-bottom: 1px solid var(--border);
+  }
+  .section:last-child { border-bottom: none; margin-bottom: 0; }
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .section-num {
+    flex-shrink: 0;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    color: var(--num);
+    width: 28px;
+  }
+  .section-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: -0.01em;
+  }
+  .section-body {
+    padding-left: 40px;
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.85;
+  }
+
+  .tbl-wrap { overflow-x: auto; margin: 12px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 480px; }
+  th {
+    background: var(--accent-l);
+    color: var(--accent);
+    font-weight: 700;
+    text-align: left;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    font-size: 12px;
+    letter-spacing: 0.02em;
+  }
+  td {
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    vertical-align: top;
+    line-height: 1.65;
+  }
+  tr:nth-child(even) td { background: var(--bg); }
+  ul, ol { padding-left: 20px; margin: 8px 0; }
+  li { margin-bottom: 4px; }
+  strong { font-weight: 600; }
+
+  .contact-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 24px;
+    margin-top: 8px;
+    font-size: 14px;
+    line-height: 2;
+  }
+  .contact-card .name { font-weight: 700; font-size: 15px; color: var(--text); margin-bottom: 4px; }
+  .contact-card a { color: var(--accent); text-decoration: none; }
+  .contact-card a:hover { text-decoration: underline; }
+
+  .doc-footer {
+    margin-top: 56px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--muted);
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="doc-header">
+    <p class="label">둘만 · Privacy Policy</p>
+    <h1>개인정보처리방침</h1>
+    <div class="meta">
+      <span>시행일: 2026년 8월 2일</span>
+      <span>버전: 1.0</span>
+      <span>서비스: 둘만 (Android)</span>
+    </div>
+  </div>
+
+  <div class="intro">
+    황앤조(이하 "회사")는 「개인정보 보호법」 및 관련 법령에 따라 이용자의 개인정보를 보호하고, 이와 관련한 고충을 신속하게 처리할 수 있도록 아래와 같이 개인정보처리방침을 수립·공개합니다.
+  </div>
+
+  <div class="section">
+    <div class="section-head">
+      <span class="section-num">01</span>
+      <span class="section-title">수집하는 개인정보 항목</span>
+    </div>
+    <div class="section-body">
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr><th>구분</th><th>항목</th><th>수집 방법</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>필수</strong></td><td>로그인 ID, 닉네임</td><td>회원가입 시 직접 입력</td></tr>
+            <tr><td><strong>서비스 이용</strong></td><td>채팅 메시지, 미디어 파일(사진·영상), 초대 코드</td><td>서비스 이용 과정에서 자동 수집</td></tr>
+            <tr><td><strong>자동 수집</strong></td><td>기기 식별자(Device ID), 접속 로그, OS 버전</td><td>서비스 접속 시 자동 생성</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="margin-top:12px; font-size:13px; color:var(--muted)">
+        ※ 회사는 민감정보(사상·신념, 건강 정보 등)를 수집하지 않습니다.
+      </p>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-head">
+      <span class="section-num">02</span>
+      <span class="section-title">개인정보 수집 및 이용 목적</span>
+    </div>
+    <div class="section-body">
+      <ul>
+        <li>회원 식별 및 로그인 서비스 제공</li>
+        <li>1:1 프라이빗 채팅 서비스 운영</li>
+        <li>미디어 파일 업로드·저장·열람 기능 제공</li>
+        <li>서비스 품질 개선 및 오류 분석</li>
+        <li>불법 이용 방지 및 보안 유지</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-head">
+      <span class="section-num">03</span>
+      <span class="section-title">개인정보 보유 및 이용 기간</span>
+    </div>
+    <div class="section-body">
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr><th>항목</th><th>보유 기간</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>계정 정보 (ID, 닉네임)</td><td>회원 탈퇴 즉시 삭제</td></tr>
+            <tr><td>채팅 메시지</td><td>채팅방 종료 후 삭제</td></tr>
+            <tr><td>미디어 파일</td><td>채팅방 종료 후 삭제</td></tr>
+            <tr><td>접속 로그</td><td>3개월</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="margin-top:12px; font-size:13px; color:var(--muted)">
+        ※ 관계 법령에 의해 보존이 필요한 경우 해당 기간 동안 보관합니다.
+      </p>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-head">
+      <span class="section-num">04</span>
+      <span class="section-title">개인정보의 제3자 제공</span>
+    </div>
+    <div class="section-body">
+      <p>회사는 이용자의 개인정보를 원칙적으로 제3자에게 제공하지 않습니다.<br>
+      다만, 아래의 경우에는 예외로 합니다.</p>
+      <ul style="margin-top:10px">
+        <li>이용자가 사전에 동의한 경우</li>
+        <li>법령의 규정에 의한 경우 (수사기관의 적법한 요청 등)</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-head">
+      <span class="section-num">05</span>
+      <span class="section-title">개인정보 처리 위탁</span>
+    </div>
+    <div class="section-body">
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr><th>수탁 업체</th><th>위탁 업무</th><th>보유 기간</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Supabase, Inc.</td>
+              <td>데이터베이스 운영, 인증 서비스, 파일 스토리지</td>
+              <td>계약 종료 시</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-head">
+      <span class="section-num">06</span>
+      <span class="section-title">이용자의 권리</span>
+    </div>
+    <div class="section-body">
+      <p>이용자는 언제든지 아래 권리를 행사할 수 있습니다.</p>
+      <ul style="margin-top:10px">
+        <li>개인정보 열람 요청</li>
+        <li>개인정보 정정·삭제 요청</li>
+        <li>개인정보 처리 정지 요청</li>
+        <li>회원 탈퇴 (앱 내 설정 또는 이메일 요청)</li>
+      </ul>
+      <p style="margin-top:12px">탈퇴 즉시 계정 및 관련 데이터는 삭제되며 복구되지 않습니다.</p>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-head">
+      <span class="section-num">07</span>
+      <span class="section-title">개인정보 보호책임자</span>
+    </div>
+    <div class="section-body">
+      <div class="contact-card">
+        <p class="name">황앤조</p>
+        <p>이메일: <a href="mailto:gmlrn9571@gmail.com">gmlrn9571@gmail.com</a></p>
+        <p>개인정보 관련 문의는 위 이메일로 접수하며, 접수일로부터 10일 이내에 답변 드립니다.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-head">
+      <span class="section-num">08</span>
+      <span class="section-title">개인정보처리방침 변경</span>
+    </div>
+    <div class="section-body">
+      <p>
+        이 개인정보처리방침은 법령·정책 변경에 따라 개정될 수 있으며,
+        변경 시 앱 내 공지 또는 이 페이지를 통해 안내합니다.
+        변경된 방침은 공지 후 7일이 경과한 날부터 효력이 발생합니다.
+      </p>
+    </div>
+  </div>
+
+  <div class="doc-footer">
+    공고일: 2026년 8월 2일 &nbsp;·&nbsp; 시행일: 2026년 8월 2일 &nbsp;·&nbsp; 황앤조
+  </div>
+
+</div>
+</body>
+</html>
