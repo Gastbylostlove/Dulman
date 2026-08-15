@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../core/api_client.dart';
 import '../core/logger.dart';
 import '../core/secure_storage.dart';
 import '../core/supabase_client.dart';
@@ -106,6 +107,7 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    ApiClient.clearLoginIdCache();
     await supabaseClient.auth.signOut();
     _loginId = null;
     _status = AuthStatus.unauthenticated;
