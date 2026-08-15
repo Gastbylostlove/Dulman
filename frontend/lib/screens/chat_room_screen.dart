@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:video_player/video_player.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../models/models.dart';
@@ -135,10 +136,27 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
   }
 
   Future<void> _handleMedia() async {
-    final picked = await _picker.pickMultiImage(limit: 10);
-    if (picked.isEmpty || !mounted) return;
+    // 1. 미디어 타입 선택 (사진 / 동영상)
+    final mediaType = await showModalBottomSheet<String>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => const _MediaTypePicker(),
+    );
+    if (mediaType == null || !mounted) return;
 
-    // 권한 타입 선택 다이얼로그
+    List<XFile> picked;
+    if (mediaType == 'video') {
+      final video = await _picker.pickVideo(source: ImageSource.gallery);
+      if (video == null || !mounted) return;
+      picked = [video];
+    } else {
+      picked = await _picker.pickMultiImage(limit: 10);
+      if (picked.isEmpty || !mounted) return;
+    }
+
+    // 2. 열람 권한 선택
     final permission = await showModalBottomSheet<String>(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -146,7 +164,6 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
       ),
       builder: (_) => const _PermissionPicker(),
     );
-
     if (permission == null || !mounted) return;
     await _sendMedia(picked, permission);
   }
@@ -731,6 +748,7 @@ class _RestrictedMediaButton extends StatelessWidget {
       MaterialPageRoute(
         builder: (_) => _MediaViewerScreen(
           mediaUrls: access.urls,
+          mimeTypes: message.media.map((m) => m.mimeType).toList(),
           initialIndex: 0,
           permissionLabel: message.permissionLabel,
         ),
@@ -755,6 +773,8 @@ class _MediaThumb extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final canOpen = message.canView;
+    final isVideo =
+        message.media[mediaIndex].mimeType.startsWith('video/');
 
     return GestureDetector(
       onTap: canOpen ? () => _openMedia(context) : null,
@@ -762,21 +782,35 @@ class _MediaThumb extends StatelessWidget {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
-            child: Image.network(
-              mediaUrl,
-              width: 120,
-              height: 120,
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stack) {
-                Log.e('IMAGE', '이미지 로드 실패: $mediaUrl', error, stack);
-                return Container(
-                  width: 120,
-                  height: 120,
-                  color: Colors.grey[200],
-                  child: const Icon(Icons.broken_image, color: Colors.grey),
-                );
-              },
-            ),
+            child: isVideo
+                ? Container(
+                    width: 120,
+                    height: 120,
+                    color: Colors.black87,
+                    child: const Center(
+                      child: Icon(
+                        Icons.play_circle_filled,
+                        color: Colors.white70,
+                        size: 40,
+                      ),
+                    ),
+                  )
+                : Image.network(
+                    mediaUrl,
+                    width: 120,
+                    height: 120,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stack) {
+                      Log.e('IMAGE', '이미지 로드 실패: $mediaUrl', error, stack);
+                      return Container(
+                        width: 120,
+                        height: 120,
+                        color: Colors.grey[200],
+                        child:
+                            const Icon(Icons.broken_image, color: Colors.grey),
+                      );
+                    },
+                  ),
           ),
           Positioned(
             right: 6,
@@ -831,6 +865,7 @@ class _MediaThumb extends StatelessWidget {
       MaterialPageRoute(
         builder: (_) => _MediaViewerScreen(
           mediaUrls: mediaUrls,
+          mimeTypes: message.media.map((m) => m.mimeType).toList(),
           initialIndex: startIndex,
           permissionLabel: message.permissionLabel,
         ),
@@ -847,11 +882,13 @@ String _resolveMediaUrl(MediaItem media) {
 
 class _MediaViewerScreen extends StatefulWidget {
   final List<String> mediaUrls;
+  final List<String> mimeTypes;
   final int initialIndex;
   final String permissionLabel;
 
   const _MediaViewerScreen({
     required this.mediaUrls,
+    required this.mimeTypes,
     required this.initialIndex,
     required this.permissionLabel,
   });
@@ -890,6 +927,12 @@ class _MediaViewerScreenState extends State<_MediaViewerScreen> {
                 itemCount: widget.mediaUrls.length,
                 onPageChanged: (value) => setState(() => _currentIndex = value),
                 itemBuilder: (_, index) {
+                  final mime = index < widget.mimeTypes.length
+                      ? widget.mimeTypes[index]
+                      : 'image/jpeg';
+                  if (mime.startsWith('video/')) {
+                    return _VideoPage(url: widget.mediaUrls[index]);
+                  }
                   return Center(
                     child: InteractiveViewer(
                       minScale: 1,
@@ -972,6 +1015,99 @@ class _MediaViewerScreenState extends State<_MediaViewerScreen> {
                     ),
                 ],
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── 동영상 플레이어 페이지 ──────────────────────────────────────────────────────
+
+class _VideoPage extends StatefulWidget {
+  final String url;
+
+  const _VideoPage({required this.url});
+
+  @override
+  State<_VideoPage> createState() => _VideoPageState();
+}
+
+class _VideoPageState extends State<_VideoPage> {
+  late final VideoPlayerController _ctrl;
+  bool _initialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = VideoPlayerController.networkUrl(Uri.parse(widget.url))
+      ..initialize().then((_) {
+        if (mounted) setState(() => _initialized = true);
+      });
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_initialized) {
+      return const Center(
+        child: CircularProgressIndicator(color: Colors.white),
+      );
+    }
+    return Center(
+      child: AspectRatio(
+        aspectRatio: _ctrl.value.aspectRatio,
+        child: GestureDetector(
+          onTap: () => setState(() {
+            _ctrl.value.isPlaying ? _ctrl.pause() : _ctrl.play();
+          }),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              VideoPlayer(_ctrl),
+              if (!_ctrl.value.isPlaying)
+                const Icon(
+                  Icons.play_circle_filled,
+                  color: Colors.white70,
+                  size: 64,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── 미디어 타입 선택 시트 ──────────────────────────────────────────────────────
+
+class _MediaTypePicker extends StatelessWidget {
+  const _MediaTypePicker();
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_rounded, color: Color(0xFFAE2F34)),
+              title: const Text('사진'),
+              onTap: () => Navigator.pop(context, 'photo'),
+            ),
+            ListTile(
+              leading:
+                  const Icon(Icons.videocam_rounded, color: Color(0xFFAE2F34)),
+              title: const Text('동영상'),
+              onTap: () => Navigator.pop(context, 'video'),
             ),
           ],
         ),
