@@ -13,7 +13,7 @@ class ApiException implements Exception {
 }
 
 class ApiClient {
-  static Future<Map<String, dynamic>> getActiveChat(String accessToken) async {
+  static Future<Map<String, dynamic>> getActiveChat() async {
     final loginId = await _currentLoginId();
     try {
       // active 채팅 우선: 참여자가 waiting/active 채팅을 동시에 가질 수 있으므로
@@ -33,7 +33,7 @@ class ApiClient {
     }
   }
 
-  static Future<Map<String, dynamic>> createChat(String accessToken) async {
+  static Future<Map<String, dynamic>> createChat() async {
     try {
       final row = await _rpcFirst('create_chat');
       return _chatResponse(row);
@@ -42,10 +42,7 @@ class ApiClient {
     }
   }
 
-  static Future<Map<String, dynamic>> joinChat(
-    String accessToken,
-    String inviteCode,
-  ) async {
+  static Future<Map<String, dynamic>> joinChat(String inviteCode) async {
     try {
       final row = await _rpcFirst('join_chat', {'p_invite_code': inviteCode});
       return _chatResponse(row);
@@ -55,7 +52,6 @@ class ApiClient {
   }
 
   static Future<Map<String, dynamic>> listMessages(
-    String accessToken,
     int chatId, {
     int? afterMessageId,
     int? beforeMessageId,
@@ -151,7 +147,6 @@ class ApiClient {
   }
 
   static Future<Map<String, dynamic>> sendText(
-    String accessToken,
     int chatId,
     String textContent,
   ) async {
@@ -166,7 +161,6 @@ class ApiClient {
   }
 
   static Future<Map<String, dynamic>> markChatRead(
-    String accessToken,
     int chatId,
     int messageId,
   ) async {
@@ -180,10 +174,7 @@ class ApiClient {
     }
   }
 
-  static Future<int> getPartnerLastReadMessageId(
-    String accessToken,
-    int chatId,
-  ) async {
+  static Future<int> getPartnerLastReadMessageId(int chatId) async {
     try {
       final loginId = await _currentLoginId();
       final rows = await supabaseClient
@@ -200,10 +191,7 @@ class ApiClient {
     }
   }
 
-  static Future<Map<String, dynamic>> resetChat(
-    String accessToken,
-    int chatId,
-  ) async {
+  static Future<Map<String, dynamic>> resetChat(int chatId) async {
     try {
       return await _rpcFirst('reset_chat', {'p_chat_id': chatId});
     } on PostgrestException catch (e) {
@@ -211,10 +199,7 @@ class ApiClient {
     }
   }
 
-  static Future<Map<String, dynamic>> leaveChat(
-    String accessToken,
-    int chatId,
-  ) async {
+  static Future<Map<String, dynamic>> leaveChat(int chatId) async {
     try {
       return await _rpcFirst('leave_chat', {'p_chat_id': chatId});
     } on PostgrestException catch (e) {
@@ -224,7 +209,6 @@ class ApiClient {
 
   // 서버 검증 후 1분짜리 signed upload token 발급
   static Future<Map<String, dynamic>> createMediaUploadIntent(
-    String accessToken,
     int chatId,
     List<Map<String, dynamic>> files,
   ) async {
@@ -264,7 +248,6 @@ class ApiClient {
   }
 
   static Future<Map<String, dynamic>> sendMediaMessage(
-    String accessToken,
     int chatId,
     String permissionType,
     List<Map<String, String>> mediaItems, {
@@ -287,10 +270,7 @@ class ApiClient {
   }
 
   // Edge Function에서 view_count 차감과 signed URL 발급을 처리
-  static Future<Map<String, dynamic>> accessMedia(
-    String accessToken,
-    int messageId,
-  ) async {
+  static Future<Map<String, dynamic>> accessMedia(int messageId) async {
     try {
       final result = await supabaseClient.functions.invoke(
         'access-media',
@@ -304,9 +284,15 @@ class ApiClient {
     }
   }
 
+  static String? _cachedLoginId;
+  static String? _cachedAuthUserId;
+
   static Future<String> _currentLoginId() async {
     final user = supabaseClient.auth.currentUser;
     if (user == null) throw ApiException('AUTH_REQUIRED', '로그인이 필요합니다.');
+    if (_cachedLoginId != null && _cachedAuthUserId == user.id) {
+      return _cachedLoginId!;
+    }
     final row = await supabaseClient
         .from('user_account')
         .select('login_id')
@@ -314,7 +300,14 @@ class ApiClient {
         .maybeSingle();
     final loginId = row?['login_id'] as String?;
     if (loginId == null) throw ApiException('AUTH_REQUIRED', '계정 정보를 찾을 수 없습니다.');
+    _cachedLoginId = loginId;
+    _cachedAuthUserId = user.id;
     return loginId;
+  }
+
+  static void clearLoginIdCache() {
+    _cachedLoginId = null;
+    _cachedAuthUserId = null;
   }
 
   static Future<Map<String, dynamic>> _rpcFirst(

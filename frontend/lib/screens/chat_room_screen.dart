@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -7,10 +6,13 @@ import 'package:video_player/video_player.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../models/models.dart';
-import '../core/api_client.dart';
 import '../core/logger.dart';
 import 'auth_screen.dart';
 import 'onboarding_screen.dart';
+
+part '_chat_message_bubble.dart';
+part '_chat_media_viewer.dart';
+part '_chat_input_bar.dart';
 
 class ChatRoomScreen extends StatefulWidget {
   const ChatRoomScreen({super.key});
@@ -31,6 +33,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     context.read<ChatProvider>().addListener(_onChatChange);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom(force: true));
     _scrollCtrl.addListener(_onScroll);
   }
 
@@ -79,7 +82,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
     });
   }
 
-  void _handleForcedLogout() async {
+  Future<void> _handleForcedLogout() async {
     context.read<ChatProvider>().clearForcedLogout();
     await context.read<AuthProvider>().logout();
     if (!mounted) return;
@@ -132,7 +135,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
     if (text.isEmpty) return;
     _textCtrl.clear();
     await context.read<ChatProvider>().sendText(text);
-    _scrollToBottom();
+    _scrollToBottom(force: true);
   }
 
   Future<void> _handleMedia() async {
@@ -165,100 +168,15 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
       builder: (_) => const _PermissionPicker(),
     );
     if (permission == null || !mounted) return;
-    await _sendMedia(picked, permission);
+    await context.read<ChatProvider>().sendMedia(picked, permission);
   }
 
-  Future<void> _sendMedia(List<XFile> files, String permissionType) async {
-    final chat = context.read<ChatProvider>();
-    final auth = context.read<AuthProvider>();
-    if (auth.accessToken == null || chat.chatId == null) return;
-
-    Log.i(
-      'MEDIA',
-      '미디어 전송 시작: ${files.length}개 파일, 권한=$permissionType, chatId=${chat.chatId}',
-    );
-
-    // 1. 업로드 인텐트 발급
-    final fileInfos = await Future.wait(files.map((f) async {
-      final ext = f.name.split('.').last.toLowerCase();
-      final detectedMime = f.mimeType;
-      final mime = detectedMime == 'image/jpg'
-          ? 'image/jpeg'
-          : detectedMime ??
-                switch (ext) {
-                  'jpg' || 'jpeg' => 'image/jpeg',
-                  'png' => 'image/png',
-                  'gif' => 'image/gif',
-                  'webp' => 'image/webp',
-                  'mp4' => 'video/mp4',
-                  _ => 'application/octet-stream',
-                };
-      final bytes = await File(f.path).length();
-      return {'client_file_id': f.name, 'mime_type': mime, 'byte_size': bytes};
-    }));
-
-    try {
-      Log.i('MEDIA', '[1/3] 업로드 인텐트 요청');
-      final intentResult = await ApiClient.createMediaUploadIntent(
-        auth.accessToken!,
-        chat.chatId!,
-        fileInfos,
-      );
-
-      final uploadItems = intentResult['upload_items'] as List<dynamic>;
-      Log.i('MEDIA', '[1/3] 인텐트 수신 완료: ${uploadItems.length}개');
-
-      // 2. 파일을 상대 경로(upload_url)로 PUT 업로드
-      Log.i('MEDIA', '[2/3] 파일 업로드 시작');
-      for (int i = 0; i < files.length; i++) {
-        final item = uploadItems[i] as Map<String, dynamic>;
-        final uploadPath = item['upload_url'] as String;
-        final uploadToken = item['upload_token'] as String;
-        final mime = fileInfos[i]['mime_type'] as String;
-        Log.i('MEDIA', '  [${i + 1}/${files.length}] 업로드');
-        await ApiClient.uploadFile(
-          uploadPath,
-          uploadToken,
-          files[i].path,
-          mime,
-        );
-      }
-      Log.i('MEDIA', '[2/3] 업로드 완료');
-
-      // 3. 메시지 전송
-      final mediaItems = uploadItems.map((item) {
-        final url = item['media_url'] as String;
-        return {'url': url, 'mime_type': item['mime_type'] as String};
-      }).toList();
-
-      Log.i('MEDIA', '[3/3] 메시지 전송');
-      await ApiClient.sendMediaMessage(
-        auth.accessToken!,
-        chat.chatId!,
-        permissionType,
-        mediaItems.cast<Map<String, String>>(),
-      );
-      Log.i('MEDIA', '미디어 전송 완료 ✓');
-
-      await chat.refreshMessages();
-    } catch (e, st) {
-      Log.e('MEDIA', '미디어 전송 실패', e, st);
-      if (!mounted) return;
-      final msg = e is ApiException ? e.message : '네트워크 오류가 발생했습니다.';
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('미디어 전송 실패: $msg')));
-    }
-  }
-
-  Future<void> _handleReset() async {
-    final chat = context.read<ChatProvider>();
-    final messenger = ScaffoldMessenger.of(context);
-    final confirm = await showDialog<bool>(
+  Future<bool> _confirm(String title, String content, String confirmLabel) {
+    return showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('대화 초기화'),
-        content: const Text('모든 대화 내역이 화면에서 사라집니다.\n서버 데이터는 보존됩니다. 계속하시겠습니까?'),
+        title: Text(title),
+        content: Text(content),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -266,15 +184,20 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text(
-              '초기화',
-              style: TextStyle(color: Color(0xFFAE2F34)),
+            child: Text(
+              confirmLabel,
+              style: const TextStyle(color: Color(0xFFAE2F34)),
             ),
           ),
         ],
       ),
-    );
-    if (confirm != true) return;
+    ).then((v) => v == true);
+  }
+
+  Future<void> _handleReset() async {
+    final chat = context.read<ChatProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+    if (!await _confirm('대화 초기화', '모든 대화 내역이 화면에서 사라집니다.\n서버 데이터는 보존됩니다. 계속하시겠습니까?', '초기화')) return;
     final err = await chat.resetChat();
     if (err != null && mounted) {
       messenger.showSnackBar(SnackBar(content: Text('초기화 실패: $err')));
@@ -285,27 +208,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
     final chat = context.read<ChatProvider>();
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('채팅방 나가기'),
-        content: const Text('채팅방을 나가면 연결이 종료됩니다.\n이 작업은 되돌릴 수 없습니다.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('취소'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text(
-              '나가기',
-              style: TextStyle(color: Color(0xFFAE2F34)),
-            ),
-          ),
-        ],
-      ),
-    );
-    if (confirm != true) return;
+    if (!await _confirm('채팅방 나가기', '채팅방을 나가면 연결이 종료됩니다.\n이 작업은 되돌릴 수 없습니다.', '나가기')) return;
     final err = await chat.leaveChat();
     if (err != null && mounted) {
       messenger.showSnackBar(SnackBar(content: Text('나가기 실패: $err')));
@@ -317,8 +220,14 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
     );
   }
 
-  void _scrollToBottom() {
-    if (_scrollCtrl.hasClients) {
+  bool get _isNearBottom {
+    if (!_scrollCtrl.hasClients) return true;
+    final pos = _scrollCtrl.position;
+    return pos.maxScrollExtent - pos.pixels < 120;
+  }
+
+  void _scrollToBottom({bool force = false}) {
+    if (_scrollCtrl.hasClients && (force || _isNearBottom)) {
       _scrollCtrl.animateTo(
         _scrollCtrl.position.maxScrollExtent,
         duration: const Duration(milliseconds: 200),
@@ -338,18 +247,9 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '채팅방 #${chat.chatId ?? "-"}',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-            ),
-            const Text(
-              'Supabase Realtime 연결',
-              style: TextStyle(fontSize: 11, color: Color(0xFFAE2F34)),
-            ),
-          ],
+        title: Text(
+          '채팅방 #${chat.chatId ?? "-"}',
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
         ),
         actions: [
           PopupMenuButton<String>(
@@ -440,898 +340,3 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
   }
 }
 
-// ─── 메시지 버블 ──────────────────────────────────────────────────────────────
-
-class _MessageBubble extends StatelessWidget {
-  final Message message;
-  final bool isMe;
-  final bool isRead;
-
-  const _MessageBubble({
-    required this.message,
-    required this.isMe,
-    required this.isRead,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final time = _formatTime(message.createdAt);
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: isMe
-            ? MainAxisAlignment.end
-            : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          if (!isMe) ...[
-            CircleAvatar(
-              radius: 14,
-              backgroundColor: const Color(0xFFE0E0E0),
-              child: Text(
-                message.senderId.isNotEmpty
-                    ? message.senderId[0].toUpperCase()
-                    : '?',
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            const SizedBox(width: 6),
-          ],
-          Flexible(
-            child: Column(
-              crossAxisAlignment: isMe
-                  ? CrossAxisAlignment.end
-                  : CrossAxisAlignment.start,
-              children: [
-                Container(
-                  constraints: BoxConstraints(
-                    maxWidth: MediaQuery.of(context).size.width * 0.68,
-                  ),
-                  padding: message.isText
-                      ? const EdgeInsets.symmetric(horizontal: 14, vertical: 10)
-                      : EdgeInsets.zero,
-                  decoration: message.isText
-                      ? BoxDecoration(
-                          color: isMe ? const Color(0xFFAE2F34) : Colors.white,
-                          borderRadius: BorderRadius.only(
-                            topLeft: const Radius.circular(18),
-                            topRight: const Radius.circular(18),
-                            bottomLeft: Radius.circular(isMe ? 18 : 4),
-                            bottomRight: Radius.circular(isMe ? 4 : 18),
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.06),
-                              blurRadius: 4,
-                              offset: const Offset(0, 1),
-                            ),
-                          ],
-                        )
-                      : null,
-                  child: message.isText
-                      ? Text(
-                          message.textContent ?? '',
-                          style: TextStyle(
-                            color: isMe
-                                ? Colors.white
-                                : const Color(0xFF1A1A1A),
-                            fontSize: 15,
-                            height: 1.4,
-                          ),
-                        )
-                      : _MediaContent(message: message),
-                ),
-                const SizedBox(height: 3),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (isRead)
-                      const Text(
-                        '읽음',
-                        style: TextStyle(fontSize: 10, color: Colors.grey),
-                      ),
-                    if (isRead) const SizedBox(width: 4),
-                    Text(
-                      time,
-                      style: const TextStyle(fontSize: 10, color: Colors.grey),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          if (isMe) const SizedBox(width: 6),
-        ],
-      ),
-    );
-  }
-
-  String _formatTime(DateTime dt) {
-    final local = dt.toLocal();
-    final h = local.hour.toString().padLeft(2, '0');
-    final m = local.minute.toString().padLeft(2, '0');
-    return '$h:$m';
-  }
-}
-
-// ─── 미디어 콘텐츠 ────────────────────────────────────────────────────────────
-
-class _MediaContent extends StatelessWidget {
-  final Message message;
-
-  const _MediaContent({required this.message});
-
-  @override
-  Widget build(BuildContext context) {
-    if (message.media.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Colors.grey[200],
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.image, color: Colors.grey, size: 20),
-            const SizedBox(width: 8),
-            Text(
-              '미디어 (${message.permissionLabel})',
-              style: const TextStyle(color: Colors.grey, fontSize: 13),
-            ),
-          ],
-        ),
-      );
-    }
-
-    final chat = context.read<ChatProvider>();
-    final isRestricted =
-        message.permissionType == 'once' || message.permissionType == 'replay_once';
-
-    // once / replay_once: 썸네일 없이 열람 버튼만 표시
-    if (isRestricted) {
-      return _RestrictedMediaButton(message: message, chat: chat);
-    }
-
-    // keep: 기존 썸네일 그리드
-    final previews = message.media.take(4).toList();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          decoration: BoxDecoration(
-            color: const Color(0xFF2E7D32),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Text(
-            message.permissionLabel,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-        const SizedBox(height: 4),
-        Wrap(
-          spacing: 4,
-          runSpacing: 4,
-          children: [
-            for (final entry in previews.asMap().entries)
-              _MediaThumb(
-                message: message,
-                chat: chat,
-                mediaIndex: entry.key,
-                mediaUrl: _resolveMediaUrl(entry.value),
-              ),
-          ],
-        ),
-        if (message.media.length > 4)
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(
-              '+${message.media.length - 4}장',
-              style: const TextStyle(color: Colors.grey, fontSize: 12),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-// once / replay_once 전용 열람 버튼
-class _RestrictedMediaButton extends StatelessWidget {
-  final Message message;
-  final ChatProvider chat;
-
-  const _RestrictedMediaButton({required this.message, required this.chat});
-
-  @override
-  Widget build(BuildContext context) {
-    final canView = message.canView;
-    final isVideo = message.media.isNotEmpty &&
-        message.media.first.mimeType.startsWith('video');
-    final count = message.media.length;
-
-    final String label;
-    if (!canView) {
-      label = '열람 횟수 초과';
-    } else if (isVideo) {
-      label = '동영상 보기';
-    } else if (count > 1) {
-      label = '사진 ${count}장 보기';
-    } else {
-      label = '사진 보기';
-    }
-
-    final badgeColor = message.permissionType == 'once'
-        ? const Color(0xFFB71C1C)
-        : const Color(0xFFE65100);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // 권한 배지
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          decoration: BoxDecoration(
-            color: badgeColor,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Text(
-            message.permissionLabel,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        // 열람 버튼
-        GestureDetector(
-          onTap: canView ? () => _open(context) : null,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            decoration: BoxDecoration(
-              color: canView ? const Color(0xFF0084FF) : Colors.grey[300],
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  canView
-                      ? (isVideo
-                          ? Icons.play_circle_filled
-                          : Icons.photo_rounded)
-                      : Icons.lock_outline_rounded,
-                  color: canView ? Colors.white : Colors.grey,
-                  size: 16,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: canView ? Colors.white : Colors.grey,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _open(BuildContext context) async {
-    final navigator = Navigator.of(context);
-    final messenger = ScaffoldMessenger.of(context);
-
-    final access = await chat.accessMedia(message.id);
-    if (!navigator.mounted || !messenger.mounted) return;
-    if (access.error != null) {
-      messenger.showSnackBar(SnackBar(content: Text(access.error!)));
-      return;
-    }
-
-    if (!navigator.mounted) return;
-    await navigator.push(
-      MaterialPageRoute(
-        builder: (_) => _MediaViewerScreen(
-          mediaUrls: access.urls,
-          mimeTypes: message.media.map((m) => m.mimeType).toList(),
-          initialIndex: 0,
-          permissionLabel: message.permissionLabel,
-        ),
-      ),
-    );
-  }
-}
-
-class _MediaThumb extends StatelessWidget {
-  final Message message;
-  final ChatProvider chat;
-  final int mediaIndex;
-  final String mediaUrl;
-
-  const _MediaThumb({
-    required this.message,
-    required this.chat,
-    required this.mediaIndex,
-    required this.mediaUrl,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final canOpen = message.canView;
-    final isVideo =
-        message.media[mediaIndex].mimeType.startsWith('video/');
-
-    return GestureDetector(
-      onTap: canOpen ? () => _openMedia(context) : null,
-      child: Stack(
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: isVideo
-                ? Container(
-                    width: 120,
-                    height: 120,
-                    color: Colors.black87,
-                    child: const Center(
-                      child: Icon(
-                        Icons.play_circle_filled,
-                        color: Colors.white70,
-                        size: 40,
-                      ),
-                    ),
-                  )
-                : Image.network(
-                    mediaUrl,
-                    width: 120,
-                    height: 120,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stack) {
-                      Log.e('IMAGE', '이미지 로드 실패: $mediaUrl', error, stack);
-                      return Container(
-                        width: 120,
-                        height: 120,
-                        color: Colors.grey[200],
-                        child:
-                            const Icon(Icons.broken_image, color: Colors.grey),
-                      );
-                    },
-                  ),
-          ),
-          Positioned(
-            right: 6,
-            bottom: 6,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.55),
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Icon(
-                canOpen
-                    ? Icons.open_in_full_rounded
-                    : Icons.lock_outline_rounded,
-                size: 12,
-                color: Colors.white,
-              ),
-            ),
-          ),
-          if (!canOpen)
-            Positioned.fill(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _openMedia(BuildContext context) async {
-    var mediaUrls = message.media.map(_resolveMediaUrl).toList();
-    final navigator = Navigator.of(context);
-    final messenger = ScaffoldMessenger.of(context);
-
-    if (message.permissionType != 'keep') {
-      final access = await chat.accessMedia(message.id);
-      if (!navigator.mounted || !messenger.mounted) return;
-      if (access.error != null) {
-        messenger.showSnackBar(SnackBar(content: Text(access.error!)));
-        return;
-      }
-      mediaUrls = access.urls;
-    }
-
-    if (!navigator.mounted) return;
-    final startIndex = mediaIndex.clamp(0, mediaUrls.length - 1).toInt();
-    await navigator.push(
-      MaterialPageRoute(
-        builder: (_) => _MediaViewerScreen(
-          mediaUrls: mediaUrls,
-          mimeTypes: message.media.map((m) => m.mimeType).toList(),
-          initialIndex: startIndex,
-          permissionLabel: message.permissionLabel,
-        ),
-      ),
-    );
-  }
-}
-
-String _resolveMediaUrl(MediaItem media) {
-  // Supabase Storage: signed URL이 발급된 상태이므로 그대로 사용
-  // (once/replay_once는 accessMedia 호출 후 signed URL로 교체됨)
-  return media.url;
-}
-
-class _MediaViewerScreen extends StatefulWidget {
-  final List<String> mediaUrls;
-  final List<String> mimeTypes;
-  final int initialIndex;
-  final String permissionLabel;
-
-  const _MediaViewerScreen({
-    required this.mediaUrls,
-    required this.mimeTypes,
-    required this.initialIndex,
-    required this.permissionLabel,
-  });
-
-  @override
-  State<_MediaViewerScreen> createState() => _MediaViewerScreenState();
-}
-
-class _MediaViewerScreenState extends State<_MediaViewerScreen> {
-  late final PageController _pageController;
-  int _currentIndex = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _currentIndex = widget.initialIndex;
-    _pageController = PageController(initialPage: widget.initialIndex);
-  }
-
-  @override
-  void dispose() {
-    _pageController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: SafeArea(
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: PageView.builder(
-                controller: _pageController,
-                itemCount: widget.mediaUrls.length,
-                onPageChanged: (value) => setState(() => _currentIndex = value),
-                itemBuilder: (_, index) {
-                  final mime = index < widget.mimeTypes.length
-                      ? widget.mimeTypes[index]
-                      : 'image/jpeg';
-                  if (mime.startsWith('video/')) {
-                    return _VideoPage(url: widget.mediaUrls[index]);
-                  }
-                  return Center(
-                    child: InteractiveViewer(
-                      minScale: 1,
-                      maxScale: 4,
-                      child: Image.network(
-                        widget.mediaUrls[index],
-                        fit: BoxFit.contain,
-                        errorBuilder: (context, error, stack) {
-                          Log.e(
-                            'IMAGE',
-                            '전체화면 이미지 로드 실패: ${widget.mediaUrls[index]}',
-                            error,
-                            stack,
-                          );
-                          return const Icon(
-                            Icons.broken_image,
-                            color: Colors.white54,
-                            size: 56,
-                          );
-                        },
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-            Positioned(
-              top: 12,
-              left: 12,
-              right: 12,
-              child: Row(
-                children: [
-                  Material(
-                    color: Colors.black.withValues(alpha: 0.45),
-                    borderRadius: BorderRadius.circular(999),
-                    child: InkWell(
-                      onTap: () => Navigator.of(context).pop(),
-                      borderRadius: BorderRadius.circular(999),
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.arrow_back_rounded,
-                              color: Colors.white,
-                              size: 18,
-                            ),
-                            SizedBox(width: 4),
-                            Text(
-                              '뒤로',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      widget.permissionLabel,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  if (widget.mediaUrls.length > 1)
-                    Text(
-                      '${_currentIndex + 1}/${widget.mediaUrls.length}',
-                      style: const TextStyle(color: Colors.white70),
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─── 동영상 플레이어 페이지 ──────────────────────────────────────────────────────
-
-class _VideoPage extends StatefulWidget {
-  final String url;
-
-  const _VideoPage({required this.url});
-
-  @override
-  State<_VideoPage> createState() => _VideoPageState();
-}
-
-class _VideoPageState extends State<_VideoPage> {
-  late final VideoPlayerController _ctrl;
-  bool _initialized = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = VideoPlayerController.networkUrl(Uri.parse(widget.url))
-      ..initialize().then((_) {
-        if (mounted) setState(() => _initialized = true);
-      });
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!_initialized) {
-      return const Center(
-        child: CircularProgressIndicator(color: Colors.white),
-      );
-    }
-    return Center(
-      child: AspectRatio(
-        aspectRatio: _ctrl.value.aspectRatio,
-        child: GestureDetector(
-          onTap: () => setState(() {
-            _ctrl.value.isPlaying ? _ctrl.pause() : _ctrl.play();
-          }),
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              VideoPlayer(_ctrl),
-              if (!_ctrl.value.isPlaying)
-                const Icon(
-                  Icons.play_circle_filled,
-                  color: Colors.white70,
-                  size: 64,
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ─── 미디어 타입 선택 시트 ──────────────────────────────────────────────────────
-
-class _MediaTypePicker extends StatelessWidget {
-  const _MediaTypePicker();
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.photo_rounded, color: Color(0xFFAE2F34)),
-              title: const Text('사진'),
-              onTap: () => Navigator.pop(context, 'photo'),
-            ),
-            ListTile(
-              leading:
-                  const Icon(Icons.videocam_rounded, color: Color(0xFFAE2F34)),
-              title: const Text('동영상'),
-              onTap: () => Navigator.pop(context, 'video'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─── 입력창 ───────────────────────────────────────────────────────────────────
-
-class _InputBar extends StatelessWidget {
-  final TextEditingController ctrl;
-  final bool sending;
-  final VoidCallback onSend;
-  final VoidCallback onMedia;
-
-  const _InputBar({
-    required this.ctrl,
-    required this.sending,
-    required this.onSend,
-    required this.onMedia,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final shortcuts = <ShortcutActivator, Intent>{
-      const SingleActivator(LogicalKeyboardKey.enter):
-          const _SendMessageIntent(),
-      const SingleActivator(LogicalKeyboardKey.numpadEnter):
-          const _SendMessageIntent(),
-    };
-
-    return Container(
-      color: Colors.white,
-      padding: EdgeInsets.only(
-        left: 8,
-        right: 8,
-        top: 8,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 8,
-      ),
-      child: Row(
-        children: [
-          // 미디어 버튼
-          IconButton(
-            onPressed: onMedia,
-            icon: const Icon(
-              Icons.photo_library_outlined,
-              color: Color(0xFFAE2F34),
-            ),
-          ),
-          // 텍스트 필드
-          Expanded(
-            child: Shortcuts(
-              shortcuts: shortcuts,
-              child: Actions(
-                actions: {
-                  _SendMessageIntent: CallbackAction<_SendMessageIntent>(
-                    onInvoke: (_) {
-                      if (!sending) onSend();
-                      return null;
-                    },
-                  ),
-                },
-                child: TextField(
-                  controller: ctrl,
-                  maxLines: 4,
-                  minLines: 1,
-                  textInputAction: TextInputAction.send,
-                  onSubmitted: (_) => onSend(),
-                  decoration: InputDecoration(
-                    hintText: '메시지 입력...',
-                    hintStyle: const TextStyle(
-                      color: Colors.grey,
-                      fontSize: 14,
-                    ),
-                    filled: true,
-                    fillColor: const Color(0xFFF5F0EA),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(22),
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 10,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 6),
-          // 전송 버튼
-          sending
-              ? const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Color(0xFFAE2F34),
-                    ),
-                  ),
-                )
-              : IconButton(
-                  onPressed: onSend,
-                  icon: const Icon(
-                    Icons.send_rounded,
-                    color: Color(0xFFAE2F34),
-                  ),
-                ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SendMessageIntent extends Intent {
-  const _SendMessageIntent();
-}
-
-// ─── 미디어 권한 선택 시트 ───────────────────────────────────────────────────────
-
-class _PermissionPicker extends StatelessWidget {
-  const _PermissionPicker();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            '열람 권한 선택',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            '선택한 권한은 이 메시지의 모든 미디어에 적용됩니다.',
-            style: TextStyle(fontSize: 12, color: Colors.grey),
-          ),
-          const SizedBox(height: 20),
-          _PermItem(
-            label: '일회용',
-            icon: Icons.looks_one_rounded,
-            description: '1회 열람 후 자동 차단 · 다운로드/캡처 불가',
-            value: 'once',
-            color: const Color(0xFFB71C1C),
-          ),
-          const SizedBox(height: 10),
-          _PermItem(
-            label: '다시보기',
-            icon: Icons.replay_circle_filled_rounded,
-            description: '2회 열람 가능 · 다운로드/캡처 불가',
-            value: 'replay_once',
-            color: const Color(0xFFE65100),
-          ),
-          const SizedBox(height: 10),
-          _PermItem(
-            label: '보관',
-            icon: Icons.lock_open_rounded,
-            description: '무제한 열람 · 다운로드/캡처 가능',
-            value: 'keep',
-            color: const Color(0xFF2E7D32),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PermItem extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final String description;
-  final String value;
-  final Color color;
-
-  const _PermItem({
-    required this.label,
-    required this.icon,
-    required this.description,
-    required this.value,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: () => Navigator.pop(context, value),
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.06),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: color.withOpacity(0.2)),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: color, size: 24),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: TextStyle(fontWeight: FontWeight.w700, color: color),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    description,
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                ],
-              ),
-            ),
-            Icon(Icons.chevron_right, color: color.withOpacity(0.5)),
-          ],
-        ),
-      ),
-    );
-  }
-}

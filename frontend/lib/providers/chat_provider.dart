@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:image_picker/image_picker.dart';
 import '../core/api_client.dart';
 import '../core/constants.dart';
 import '../core/logger.dart';
@@ -66,7 +68,7 @@ class ChatProvider extends ChangeNotifier {
     }
     Log.i('CHAT', 'createChat 시작');
     try {
-      final result = await ApiClient.createChat(_accessToken!);
+      final result = await ApiClient.createChat();
       _chatId = result['chat_id'] as int;
       _inviteCode = result['invite_code'] as String;
       _createError = null;
@@ -104,7 +106,7 @@ class ChatProvider extends ChangeNotifier {
     if (_accessToken == null) return;
     Log.i('CHAT', 'loadActiveChat 시작');
     try {
-      final result = await ApiClient.getActiveChat(_accessToken!);
+      final result = await ApiClient.getActiveChat();
       final id = knownChatId ?? result['active_chat_id'] as int?;
       if (id == null) {
         final wasActive = _chatId != null && _state == ChatState.active;
@@ -152,7 +154,7 @@ class ChatProvider extends ChangeNotifier {
     if (_accessToken == null) return '인증 오류';
     Log.i('CHAT', 'joinChat 시작');
     try {
-      final result = await ApiClient.joinChat(_accessToken!, inviteCode);
+      final result = await ApiClient.joinChat(inviteCode);
       _chatId = result['chat_id'] as int;
       _inviteCode = null;
       _state = ChatState.active;
@@ -164,15 +166,84 @@ class ChatProvider extends ChangeNotifier {
       return null;
     } on ApiException catch (e) {
       Log.e('CHAT', 'joinChat 실패: [${e.code}] ${e.message}');
-      switch (e.code) {
-        case 'CHAT_INVITE_NOT_FOUND': return '초대코드를 찾을 수 없습니다.';
-        case 'CHAT_INVITE_RATE_LIMITED': return '시도 횟수 초과. 5분 후 다시 시도해주세요.';
-        case kErrChatActiveExists: return '이미 활성 채팅방이 있습니다.';
-        case 'CHAT_SELF_JOIN': return '본인이 만든 초대코드입니다. 다른 계정으로 로그인해주세요.';
-        case 'CHAT_FULL': return '이미 참여자가 있는 채팅방입니다.';
-        case 'CHAT_NOT_ACTIVE': return '종료된 채팅방입니다.';
-        default: return e.message;
+      return e.message;
+    }
+  }
+
+  // 미디어 전송 (업로드 인텐트 → 파일 업로드 → 메시지 저장)
+  Future<void> sendMedia(List<XFile> files, String permissionType) async {
+    if (_accessToken == null || _chatId == null) return;
+    _sendError = null;
+    _isSending = true;
+    notifyListeners();
+
+    Log.i('MEDIA', '미디어 전송 시작: ${files.length}개 파일, 권한=$permissionType, chatId=$_chatId');
+
+    final fileInfos = await Future.wait(files.map((f) async {
+      final ext = f.name.split('.').last.toLowerCase();
+      final detectedMime = f.mimeType;
+      final mime = detectedMime == 'image/jpg'
+          ? 'image/jpeg'
+          : detectedMime ??
+                switch (ext) {
+                  'jpg' || 'jpeg' => 'image/jpeg',
+                  'png' => 'image/png',
+                  'gif' => 'image/gif',
+                  'webp' => 'image/webp',
+                  'mp4' => 'video/mp4',
+                  _ => 'application/octet-stream',
+                };
+      final bytes = await File(f.path).length();
+      return {'client_file_id': f.name, 'mime_type': mime, 'byte_size': bytes};
+    }));
+
+    try {
+      Log.i('MEDIA', '[1/3] 업로드 인텐트 요청');
+      final intentResult = await ApiClient.createMediaUploadIntent(
+        _chatId!,
+        fileInfos,
+      );
+      final uploadItems = intentResult['upload_items'] as List<dynamic>;
+      Log.i('MEDIA', '[1/3] 인텐트 수신 완료: ${uploadItems.length}개');
+
+      Log.i('MEDIA', '[2/3] 파일 업로드 시작');
+      for (int i = 0; i < files.length; i++) {
+        final item = uploadItems[i] as Map<String, dynamic>;
+        final mime = fileInfos[i]['mime_type'] as String;
+        Log.i('MEDIA', '  [${i + 1}/${files.length}] 업로드');
+        await ApiClient.uploadFile(
+          item['upload_url'] as String,
+          item['upload_token'] as String,
+          files[i].path,
+          mime,
+        );
       }
+      Log.i('MEDIA', '[2/3] 업로드 완료');
+
+      final mediaItems = uploadItems.map((item) => <String, String>{
+            'url': item['media_url'] as String,
+            'mime_type': item['mime_type'] as String,
+          }).toList();
+
+      Log.i('MEDIA', '[3/3] 메시지 전송');
+      await ApiClient.sendMediaMessage(_chatId!, permissionType, mediaItems);
+      Log.i('MEDIA', '미디어 전송 완료 ✓');
+      await _loadMessages();
+    } on ApiException catch (e) {
+      Log.e('MEDIA', '미디어 전송 실패: [${e.code}] ${e.message}');
+      if (e.code == kErrDeviceReplaced) {
+        _forcedLogout = true;
+      } else if (e.code == 'CHAT_NOT_ACTIVE') {
+        _state = ChatState.ended;
+      } else {
+        _sendError = e.message;
+      }
+    } catch (e, st) {
+      Log.e('MEDIA', '미디어 전송 실패 (예기치 않음)', e, st);
+      _sendError = '네트워크 오류가 발생했습니다.';
+    } finally {
+      _isSending = false;
+      notifyListeners();
     }
   }
 
@@ -185,7 +256,7 @@ class ChatProvider extends ChangeNotifier {
     Log.i('CHAT', 'sendText: ${text.length}자');
 
     try {
-      await ApiClient.sendText(_accessToken!, _chatId!, text.trim());
+      await ApiClient.sendText(_chatId!, text.trim());
       Log.i('CHAT', 'sendText 완료');
     } on ApiException catch (e) {
       Log.e('CHAT', 'sendText 실패: [${e.code}] ${e.message}');
@@ -209,7 +280,7 @@ class ChatProvider extends ChangeNotifier {
     }
     Log.i('CHAT', 'accessMedia: messageId=$messageId');
     try {
-      final result = await ApiClient.accessMedia(_accessToken!, messageId);
+      final result = await ApiClient.accessMedia(messageId);
       final signedUrls = (result['signed_urls'] as List<dynamic>).cast<String>();
 
       // 해당 메시지의 media URL을 signed URL로 교체
@@ -242,7 +313,7 @@ class ChatProvider extends ChangeNotifier {
     if (_accessToken == null || _chatId == null) return '오류';
     Log.i('CHAT', 'resetChat: chatId=$_chatId');
     try {
-      final result = await ApiClient.resetChat(_accessToken!, _chatId!);
+      final result = await ApiClient.resetChat(_chatId!);
       _lastResetAt = _parseTimestamp(result['last_reset_at']);
       await _clearMessagesAfterReset(_chatId!);
       await _loadMessages(replace: true);
@@ -260,7 +331,7 @@ class ChatProvider extends ChangeNotifier {
     if (_accessToken == null || _chatId == null) return '오류';
     Log.i('CHAT', 'leaveChat: chatId=$_chatId');
     try {
-      await ApiClient.leaveChat(_accessToken!, _chatId!);
+      await ApiClient.leaveChat(_chatId!);
       _endChat();
       Log.i('CHAT', 'leaveChat 완료');
       return null;
@@ -284,7 +355,7 @@ class ChatProvider extends ChangeNotifier {
   Future<void> markRead() async {
     if (_accessToken == null || _chatId == null || _messages.isEmpty) return;
     try {
-      await ApiClient.markChatRead(_accessToken!, _chatId!, _messages.last.id);
+      await ApiClient.markChatRead(_chatId!, _messages.last.id);
     } on ApiException catch (e) {
       Log.w('CHAT', '읽음 상태 반영 실패: [${e.code}]');
     }
@@ -293,10 +364,7 @@ class ChatProvider extends ChangeNotifier {
   Future<void> _loadPartnerReadState() async {
     if (_accessToken == null || _chatId == null) return;
     try {
-      _partnerLastReadMessageId = await ApiClient.getPartnerLastReadMessageId(
-        _accessToken!,
-        _chatId!,
-      );
+      _partnerLastReadMessageId = await ApiClient.getPartnerLastReadMessageId(_chatId!);
     } on ApiException catch (e) {
       Log.w('CHAT', '상대방 읽음 상태 조회 실패: [${e.code}]');
     }
@@ -324,7 +392,6 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final result = await ApiClient.listMessages(
-        _accessToken!,
         chatId,
         beforeMessageId: _messages.first.id,
         descending: true,
@@ -358,7 +425,6 @@ class ChatProvider extends ChangeNotifier {
       // 초기 로드는 최신 메시지부터 (DESC), 이후 증분 로드는 ASC
       final isInitial = replace || _messages.isEmpty;
       final result = await ApiClient.listMessages(
-        _accessToken!,
         chatId,
         afterMessageId: isInitial ? null : _messages.last.id,
         descending: isInitial,
@@ -444,18 +510,22 @@ class ChatProvider extends ChangeNotifier {
         value: chatId,
       ),
       callback: (payload) async {
-        final record = payload.newRecord;
-        // 텍스트 메시지는 payload로 즉시 추가, 미디어는 full reload
-        if (record.isNotEmpty && record['type'] == 'text') {
-          final msg = Message.fromJson({...record, 'media': <dynamic>[]});
-          final byId = {for (final m in _messages) m.id: m};
-          byId[msg.id] = msg;
-          _messages = byId.values.toList()..sort((a, b) => a.id.compareTo(b.id));
-          await _cacheMessages([msg]);
-          notifyListeners();
-        } else {
-          await _loadMessages();
-          notifyListeners();
+        try {
+          final record = payload.newRecord;
+          // 텍스트 메시지는 payload로 즉시 추가, 미디어는 full reload
+          if (record.isNotEmpty && record['type'] == 'text') {
+            final msg = Message.fromJson({...record, 'media': <dynamic>[]});
+            final byId = {for (final m in _messages) m.id: m};
+            byId[msg.id] = msg;
+            _messages = byId.values.toList()..sort((a, b) => a.id.compareTo(b.id));
+            await _cacheMessages([msg]);
+            notifyListeners();
+          } else {
+            await _loadMessages();
+            notifyListeners();
+          }
+        } catch (e, st) {
+          Log.e('REALTIME', '메시지 insert 처리 실패', e, st);
         }
       },
     );
@@ -469,22 +539,26 @@ class ChatProvider extends ChangeNotifier {
         value: chatId,
       ),
       callback: (payload) async {
-        final status = payload.newRecord['status'] as String?;
-        final resetAt = _parseTimestamp(payload.newRecord['last_reset_at']);
-        final resetChanged = resetAt != null && resetAt != _lastResetAt;
-        if (status == 'active' && _state != ChatState.active) {
-          _state = ChatState.active;
-          _messages = [];
-          _lastResetAt = resetAt;
-          await _loadMessages(replace: true);
-        } else if (status == 'active' && resetChanged) {
-          _lastResetAt = resetAt;
-          await _clearMessagesAfterReset(chatId);
-          await _loadMessages(replace: true);
-        } else if (status == 'ended') {
-          _state = ChatState.ended;
+        try {
+          final status = payload.newRecord['status'] as String?;
+          final resetAt = _parseTimestamp(payload.newRecord['last_reset_at']);
+          final resetChanged = resetAt != null && resetAt != _lastResetAt;
+          if (status == 'active' && _state != ChatState.active) {
+            _state = ChatState.active;
+            _messages = [];
+            _lastResetAt = resetAt;
+            await _loadMessages(replace: true);
+          } else if (status == 'active' && resetChanged) {
+            _lastResetAt = resetAt;
+            await _clearMessagesAfterReset(chatId);
+            await _loadMessages(replace: true);
+          } else if (status == 'ended') {
+            _state = ChatState.ended;
+          }
+          notifyListeners();
+        } catch (e, st) {
+          Log.e('REALTIME', 'chat update 처리 실패', e, st);
         }
-        notifyListeners();
       },
     );
     channel.onPostgresChanges(
@@ -497,8 +571,12 @@ class ChatProvider extends ChangeNotifier {
         value: chatId,
       ),
       callback: (_) async {
-        await _loadPartnerReadState();
-        notifyListeners();
+        try {
+          await _loadPartnerReadState();
+          notifyListeners();
+        } catch (e, st) {
+          Log.e('REALTIME', 'read_state 처리 실패', e, st);
+        }
       },
     );
     _realtimeChannel = channel..subscribe();
