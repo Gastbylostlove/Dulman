@@ -36,7 +36,7 @@ class _InputBar extends StatelessWidget {
             onPressed: onMedia,
             icon: const Icon(
               Icons.photo_library_outlined,
-              color: Color(0xFFAE2F34),
+              color: Color(0xFFBE4B51),
             ),
           ),
           Expanded(
@@ -87,7 +87,7 @@ class _InputBar extends StatelessWidget {
                     height: 20,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: Color(0xFFAE2F34),
+                      color: Color(0xFFBE4B51),
                     ),
                   ),
                 )
@@ -95,7 +95,7 @@ class _InputBar extends StatelessWidget {
                   onPressed: onSend,
                   icon: const Icon(
                     Icons.send_rounded,
-                    color: Color(0xFFAE2F34),
+                    color: Color(0xFFBE4B51),
                   ),
                 ),
         ],
@@ -183,9 +183,9 @@ class _PermItem extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.06),
+          color: color.withOpacity(0.10),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: color.withOpacity(0.2)),
+          border: Border.all(color: color.withOpacity(0.28)),
         ),
         child: Row(
           children: [

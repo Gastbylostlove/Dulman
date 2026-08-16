@@ -54,7 +54,7 @@ class _MessageBubble extends StatelessWidget {
                       : EdgeInsets.zero,
                   decoration: message.isText
                       ? BoxDecoration(
-                          color: isMe ? const Color(0xFFAE2F34) : Colors.white,
+                          color: isMe ? const Color(0xFFBE4B51) : Colors.white,
                           borderRadius: BorderRadius.only(
                             topLeft: const Radius.circular(18),
                             topRight: const Radius.circular(18),
@@ -63,9 +63,9 @@ class _MessageBubble extends StatelessWidget {
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.06),
-                              blurRadius: 4,
-                              offset: const Offset(0, 1),
+                              color: Colors.black.withOpacity(0.08),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
                             ),
                           ],
                         )

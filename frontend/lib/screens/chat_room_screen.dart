@@ -186,7 +186,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
             onPressed: () => Navigator.pop(context, true),
             child: Text(
               confirmLabel,
-              style: const TextStyle(color: Color(0xFFAE2F34)),
+              style: const TextStyle(color: Color(0xFFBE4B51)),
             ),
           ),
         ],
@@ -263,7 +263,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
                 value: 'leave',
                 child: Text(
                   '채팅방 나가기',
-                  style: TextStyle(color: Color(0xFFAE2F34)),
+                  style: TextStyle(color: Color(0xFFBE4B51)),
                 ),
               ),
             ],

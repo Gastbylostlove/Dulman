@@ -149,7 +149,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         title: const Text(
           '둘만',
           style: TextStyle(
-            color: Color(0xFFAE2F34),
+            color: Color(0xFFBE4B51),
             fontWeight: FontWeight.w800,
           ),
         ),
@@ -180,7 +180,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               labelColor: Colors.white,
               unselectedLabelColor: Colors.grey,
               indicator: BoxDecoration(
-                color: const Color(0xFFAE2F34),
+                color: const Color(0xFFBE4B51),
                 borderRadius: BorderRadius.circular(10),
               ),
               indicatorSize: TabBarIndicatorSize.tab,
@@ -244,7 +244,7 @@ class _CreateTab extends StatelessWidget {
             ),
             child: const Icon(
               Icons.favorite,
-              color: Color(0xFFAE2F34),
+              color: Color(0xFFBE4B51),
               size: 44,
             ),
           ),
@@ -267,7 +267,7 @@ class _CreateTab extends StatelessWidget {
               color: Colors.white,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: const Color(0xFFAE2F34).withOpacity(0.3),
+                color: const Color(0xFFBE4B51).withOpacity(0.3),
                 width: 1.5,
                 style: BorderStyle.solid,
               ),
@@ -295,7 +295,7 @@ class _CreateTab extends StatelessWidget {
                   const SizedBox(
                     height: 32,
                     child: CircularProgressIndicator(
-                      color: Color(0xFFAE2F34),
+                      color: Color(0xFFBE4B51),
                       strokeWidth: 2,
                     ),
                   )
@@ -317,7 +317,7 @@ class _CreateTab extends StatelessWidget {
                       Text(
                         chat.createError!,
                         textAlign: TextAlign.center,
-                        style: const TextStyle(color: Color(0xFFAE2F34)),
+                        style: const TextStyle(color: Color(0xFFBE4B51)),
                       ),
                       const SizedBox(height: 8),
                       TextButton(
@@ -348,7 +348,7 @@ class _CreateTab extends StatelessWidget {
               icon: const Icon(Icons.copy, size: 18),
               label: const Text('코드 복사 및 공유'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFAE2F34),
+                backgroundColor: const Color(0xFFBE4B51),
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
@@ -455,14 +455,14 @@ class _JoinTab extends StatelessWidget {
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
                 borderSide: const BorderSide(
-                  color: Color(0xFFAE2F34),
+                  color: Color(0xFFBE4B51),
                   width: 1.5,
                 ),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
                 borderSide: const BorderSide(
-                  color: Color(0xFFAE2F34),
+                  color: Color(0xFFBE4B51),
                   width: 2,
                 ),
               ),
@@ -490,7 +490,7 @@ class _JoinTab extends StatelessWidget {
                   : const Icon(Icons.link, size: 20),
               label: Text(joining ? '연결 중...' : '연결하기'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFAE2F34),
+                backgroundColor: const Color(0xFFBE4B51),
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),

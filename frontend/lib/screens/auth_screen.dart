@@ -117,7 +117,7 @@ class _AuthScreenState extends State<AuthScreen>
           children: [
             const SizedBox(height: 40),
             // 로고
-            const Icon(Icons.favorite, color: Color(0xFFAE2F34), size: 48),
+            const Icon(Icons.favorite, color: Color(0xFFBE4B51), size: 48),
             const SizedBox(height: 12),
             const Text(
               '둘만',
@@ -146,7 +146,7 @@ class _AuthScreenState extends State<AuthScreen>
                 labelColor: Colors.white,
                 unselectedLabelColor: Colors.grey,
                 indicator: BoxDecoration(
-                  color: const Color(0xFFAE2F34),
+                  color: const Color(0xFFBE4B51),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 indicatorSize: TabBarIndicatorSize.tab,
@@ -325,7 +325,7 @@ class _Field extends StatelessWidget {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFAE2F34), width: 1.5),
+          borderSide: const BorderSide(color: Color(0xFFBE4B51), width: 1.5),
         ),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
@@ -355,7 +355,7 @@ class _SubmitButton extends StatelessWidget {
       child: ElevatedButton(
         onPressed: loading ? null : onTap,
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFFAE2F34),
+          backgroundColor: const Color(0xFFBE4B51),
           foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
