@@ -111,20 +111,20 @@ class _AuthScreenState extends State<AuthScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFBF9F6),
+      backgroundColor: const Color(0xFF161124),
       body: SafeArea(
         child: Column(
           children: [
             const SizedBox(height: 40),
             // 로고
-            const Icon(Icons.favorite, color: Color(0xFFAE2F34), size: 48),
+            const Icon(Icons.favorite, color: Color(0xFFFF5E00), size: 48),
             const SizedBox(height: 12),
             const Text(
               '둘만',
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.w800,
-                color: Color(0xFF1A1A1A),
+                color: Colors.white,
                 letterSpacing: -0.5,
               ),
             ),
@@ -138,7 +138,7 @@ class _AuthScreenState extends State<AuthScreen>
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 24),
               decoration: BoxDecoration(
-                color: const Color(0xFFEEEAE5),
+                color: const Color(0xFF0F0C1C),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: TabBar(
@@ -146,7 +146,7 @@ class _AuthScreenState extends State<AuthScreen>
                 labelColor: Colors.white,
                 unselectedLabelColor: Colors.grey,
                 indicator: BoxDecoration(
-                  color: const Color(0xFFAE2F34),
+                  color: const Color(0xFFFF5E00),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 indicatorSize: TabBarIndicatorSize.tab,
@@ -170,14 +170,14 @@ class _AuthScreenState extends State<AuthScreen>
                     vertical: 10,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFFEBEB),
+                    color: const Color(0xFF2A0C0C),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFFFFCDD2)),
+                    border: Border.all(color: const Color(0xFF7B2020)),
                   ),
                   child: Text(
                     _error!,
                     style: const TextStyle(
-                      color: Color(0xFFB71C1C),
+                      color: Color(0xFFFF8080),
                       fontSize: 13,
                     ),
                   ),
@@ -314,18 +314,18 @@ class _Field extends StatelessWidget {
         labelText: label,
         hintText: hint,
         filled: true,
-        fillColor: Colors.white,
+        fillColor: const Color(0xFF1E1830),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
+          borderSide: const BorderSide(color: Color(0xFF3A2D5A)),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
+          borderSide: const BorderSide(color: Color(0xFF3A2D5A)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFAE2F34), width: 1.5),
+          borderSide: const BorderSide(color: Color(0xFFFF5E00), width: 1.5),
         ),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
@@ -355,7 +355,7 @@ class _SubmitButton extends StatelessWidget {
       child: ElevatedButton(
         onPressed: loading ? null : onTap,
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFFAE2F34),
+          backgroundColor: const Color(0xFFFF5E00),
           foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),

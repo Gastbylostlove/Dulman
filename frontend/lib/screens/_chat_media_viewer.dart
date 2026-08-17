@@ -238,13 +238,13 @@ class _MediaTypePicker extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.photo_rounded, color: Color(0xFFAE2F34)),
+              leading: const Icon(Icons.photo_rounded, color: Color(0xFFFF5E00)),
               title: const Text('사진'),
               onTap: () => Navigator.pop(context, 'photo'),
             ),
             ListTile(
               leading:
-                  const Icon(Icons.videocam_rounded, color: Color(0xFFAE2F34)),
+                  const Icon(Icons.videocam_rounded, color: Color(0xFFFF5E00)),
               title: const Text('동영상'),
               onTap: () => Navigator.pop(context, 'video'),
             ),

@@ -45,7 +45,7 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFAE2F34),
+      backgroundColor: const Color(0xFF161124),
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -54,12 +54,12 @@ class _SplashScreenState extends State<SplashScreen> {
               width: 80,
               height: 80,
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: const Color(0xFF2A1B3D),
                 borderRadius: BorderRadius.circular(24),
               ),
               child: const Icon(
-                Icons.favorite,
-                color: Color(0xFFAE2F34),
+                Icons.lock_rounded,
+                color: Color(0xFFFF5E00),
                 size: 44,
               ),
             ),

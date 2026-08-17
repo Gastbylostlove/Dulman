@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'core/supabase_config.dart';
 import 'data/local_database.dart';
@@ -39,14 +40,18 @@ class DulmanApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(
-            seedColor: const Color(0xFFAE2F34),
-            brightness: Brightness.light,
+            seedColor: const Color(0xFFFF5E00),
+            brightness: Brightness.dark,
+          ),
+          scaffoldBackgroundColor: const Color(0xFF161124),
+          textTheme: GoogleFonts.notoSansKrTextTheme(
+            ThemeData(brightness: Brightness.dark).textTheme,
           ),
           useMaterial3: true,
           appBarTheme: const AppBarTheme(
             systemOverlayStyle: SystemUiOverlayStyle(
-              statusBarBrightness: Brightness.light,
-              statusBarIconBrightness: Brightness.dark,
+              statusBarBrightness: Brightness.dark,
+              statusBarIconBrightness: Brightness.light,
             ),
           ),
         ),
