@@ -26,7 +26,7 @@ class _MessageBubble extends StatelessWidget {
           if (!isMe) ...[
             CircleAvatar(
               radius: 14,
-              backgroundColor: const Color(0xFFE0E0E0),
+              backgroundColor: const Color(0xFF3A2D5A),
               child: Text(
                 message.senderId.isNotEmpty
                     ? message.senderId[0].toUpperCase()
@@ -34,6 +34,7 @@ class _MessageBubble extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
+                  color: Colors.white70,
                 ),
               ),
             ),
@@ -54,16 +55,23 @@ class _MessageBubble extends StatelessWidget {
                       : EdgeInsets.zero,
                   decoration: message.isText
                       ? BoxDecoration(
-                          color: isMe ? const Color(0xFFBE4B51) : Colors.white,
+                          color: isMe
+                              ? const Color(0xFF2A1B3D)
+                              : const Color(0xFF262629),
                           borderRadius: BorderRadius.only(
                             topLeft: const Radius.circular(18),
                             topRight: const Radius.circular(18),
                             bottomLeft: Radius.circular(isMe ? 18 : 4),
                             bottomRight: Radius.circular(isMe ? 4 : 18),
                           ),
+                          border: isMe
+                              ? null
+                              : Border.all(
+                                  color: Colors.white.withOpacity(0.08),
+                                ),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.08),
+                              color: Colors.black.withOpacity(0.4),
                               blurRadius: 6,
                               offset: const Offset(0, 2),
                             ),
@@ -76,7 +84,7 @@ class _MessageBubble extends StatelessWidget {
                           style: TextStyle(
                             color: isMe
                                 ? Colors.white
-                                : const Color(0xFF1A1A1A),
+                                : Colors.white.withValues(alpha: 0.88),
                             fontSize: 15,
                             height: 1.4,
                           ),
@@ -95,7 +103,7 @@ class _MessageBubble extends StatelessWidget {
                     if (isRead) const SizedBox(width: 4),
                     Text(
                       time,
-                      style: const TextStyle(fontSize: 10, color: Colors.grey),
+                      style: const TextStyle(fontSize: 10, color: Colors.white30),
                     ),
                   ],
                 ),

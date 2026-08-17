@@ -40,15 +40,18 @@ class DulmanApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(
-            seedColor: const Color(0xFFBE4B51),
-            brightness: Brightness.light,
+            seedColor: const Color(0xFFFF5E00),
+            brightness: Brightness.dark,
           ),
-          textTheme: GoogleFonts.notoSansKrTextTheme(),
+          scaffoldBackgroundColor: const Color(0xFF161124),
+          textTheme: GoogleFonts.notoSansKrTextTheme(
+            ThemeData(brightness: Brightness.dark).textTheme,
+          ),
           useMaterial3: true,
           appBarTheme: const AppBarTheme(
             systemOverlayStyle: SystemUiOverlayStyle(
-              statusBarBrightness: Brightness.light,
-              statusBarIconBrightness: Brightness.dark,
+              statusBarBrightness: Brightness.dark,
+              statusBarIconBrightness: Brightness.light,
             ),
           ),
         ),

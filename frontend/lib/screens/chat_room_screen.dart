@@ -186,7 +186,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
             onPressed: () => Navigator.pop(context, true),
             child: Text(
               confirmLabel,
-              style: const TextStyle(color: Color(0xFFBE4B51)),
+              style: const TextStyle(color: Color(0xFFFF5E00)),
             ),
           ),
         ],
@@ -243,9 +243,9 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
     final myId = auth.loginId ?? '';
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F0EA),
+      backgroundColor: const Color(0xFF161124),
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: const Color(0xFF0F0C1C),
         elevation: 0,
         title: Text(
           '채팅방 #${chat.chatId ?? "-"}',
@@ -263,7 +263,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
                 value: 'leave',
                 child: Text(
                   '채팅방 나가기',
-                  style: TextStyle(color: Color(0xFFBE4B51)),
+                  style: TextStyle(color: Color(0xFFFF5E00)),
                 ),
               ),
             ],
